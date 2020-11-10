@@ -30,6 +30,9 @@
 #include "server.h"
 #include "atomicvar.h"
 #include "cluster.h"
+#include "my_util.h"
+#include "uring.h"
+#include "uring_ops.h"
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <math.h>
@@ -910,6 +913,7 @@ void clientAcceptHandler(connection *conn) {
                 "4) Setup a bind address or an authentication password. "
                 "NOTE: You only need to do one of the above things in order for "
                 "the server to start accepting connections from the outside.\r\n";
+            eprintf(">> Encountered unpatched connWrite\n");
             if (connWrite(c->conn,err,strlen(err)) == -1) {
                 /* Nothing to do, Just to avoid the warning... */
             }
@@ -958,6 +962,7 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip) {
         /* That's a best effort error message, don't check write errors.
          * Note that for TLS connections, no handshake was done yet so nothing
          * is written and the connection will just drop. */
+        eprintf(">> Encountered unpatched connWrite\n");
         if (connWrite(conn,err,strlen(err)) == -1) {
             /* Nothing to do, Just to avoid the warning... */
         }
@@ -1337,9 +1342,14 @@ int writeToClient(client *c, int handler_installed) {
     size_t objlen;
     clientReplyBlock *o;
 
+    unsigned replies = 0;
     while(clientHasPendingReplies(c)) {
+        if (replies++ > 0) {
+            eprintf(">> Expected client to only have one reply!\n");
+        }
         if (c->bufpos > 0) {
-            nwritten = connWrite(c->conn,c->buf+c->sentlen,c->bufpos-c->sentlen);
+            //nwritten = connWrite(c->conn,c->buf+c->sentlen,c->bufpos-c->sentlen);
+            nwritten = uring_connWrite(c->conn,c->buf+c->sentlen,c->bufpos-c->sentlen);
             if (nwritten <= 0) break;
             c->sentlen += nwritten;
             totwritten += nwritten;
@@ -1360,7 +1370,8 @@ int writeToClient(client *c, int handler_installed) {
                 continue;
             }
 
-            nwritten = connWrite(c->conn, o->buf + c->sentlen, objlen - c->sentlen);
+            //nwritten = connWrite(c->conn, o->buf + c->sentlen, objlen - c->sentlen);
+            nwritten = uring_connWrite(c->conn, o->buf + c->sentlen, objlen - c->sentlen);
             if (nwritten <= 0) break;
             c->sentlen += nwritten;
             totwritten += nwritten;

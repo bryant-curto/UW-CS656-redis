@@ -164,7 +164,7 @@ static void connSocketClose(connection *conn) {
     zfree(conn);
 }
 
-static int connSocketWrite(connection *conn, const void *data, size_t data_len) {
+int connSocketWrite(connection *conn, const void *data, size_t data_len) {
     int ret = write(conn->fd, data, data_len);
     if (ret < 0 && errno != EAGAIN) {
         conn->last_errno = errno;

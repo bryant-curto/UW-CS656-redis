@@ -31,6 +31,7 @@
 #include "server.h"
 #include "cluster.h"
 #include "endianconv.h"
+#include "my_util.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -2214,6 +2215,7 @@ void clusterWriteHandler(connection *conn) {
     clusterLink *link = connGetPrivateData(conn);
     ssize_t nwritten;
 
+    eprintf("Encountered unpatched connWrite\n");
     nwritten = connWrite(conn, link->sndbuf, sdslen(link->sndbuf));
     if (nwritten <= 0) {
         serverLog(LL_DEBUG,"I/O error writing to node link: %s",

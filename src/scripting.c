@@ -31,6 +31,7 @@
 #include "sha1.h"
 #include "rand.h"
 #include "cluster.h"
+#include "my_util.h"
 
 #include <lua.h>
 #include <lauxlib.h>
@@ -1833,6 +1834,7 @@ void ldbSendLogs(void) {
         proto = sdscatlen(proto,"\r\n",2);
         listDelNode(ldb.logs,ln);
     }
+    eprintf("Encountered unpatched connWrite\n");
     if (connWrite(ldb.conn,proto,sdslen(proto)) == -1) {
         /* Avoid warning. We don't check the return value of write()
          * since the next read() will catch the I/O error and will

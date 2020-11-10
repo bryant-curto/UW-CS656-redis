@@ -33,6 +33,7 @@
 #include "bio.h"
 #include "latency.h"
 #include "atomicvar.h"
+#include "uring.h"
 
 #include <time.h>
 #include <signal.h>
@@ -5136,6 +5137,8 @@ int iAmMaster(void) {
 int main(int argc, char **argv) {
     struct timeval tv;
     int j;
+
+	uring_init(0, 1);
 
 #ifdef REDIS_TEST
     if (argc == 3 && !strcasecmp(argv[1], "test")) {

@@ -30,6 +30,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "uring.h"
+
 #include <stdio.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -439,6 +441,8 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
             tvp = &tv;
         }
 
+       uring_maybeBulkSubmit();
+
         if (eventLoop->beforesleep != NULL && flags & AE_CALL_BEFORE_SLEEP)
             eventLoop->beforesleep(eventLoop);
 
@@ -449,6 +453,8 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         /* After sleep callback. */
         if (eventLoop->aftersleep != NULL && flags & AE_CALL_AFTER_SLEEP)
             eventLoop->aftersleep(eventLoop);
+
+       uring_processResponses();
 
         for (j = 0; j < numevents; j++) {
             aeFileEvent *fe = &eventLoop->events[eventLoop->fired[j].fd];

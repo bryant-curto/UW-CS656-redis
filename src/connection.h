@@ -137,8 +137,11 @@ static inline int connBlockingConnect(connection *conn, const char *addr, int po
  * connGetState() to see if the connection state is still CONN_STATE_CONNECTED.
  */
 static inline int connWrite(connection *conn, const void *data, size_t data_len) {
+    // This calls connSocketWrite()
     return conn->type->write(conn, data, data_len);
 }
+
+int connSocketWrite(connection *conn, const void *data, size_t data_len);
 
 /* Read from the connection, behaves the same as read(2).
  * 

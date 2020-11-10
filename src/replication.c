@@ -32,6 +32,7 @@
 #include "server.h"
 #include "cluster.h"
 #include "bio.h"
+#include "my_util.h"
 
 #include <sys/time.h>
 #include <unistd.h>
@@ -500,6 +501,7 @@ int replicationSetupSlaveForFullResync(client *slave, long long offset) {
     if (!(slave->flags & CLIENT_PRE_PSYNC)) {
         buflen = snprintf(buf,sizeof(buf),"+FULLRESYNC %s %lld\r\n",
                           server.replid,offset);
+        eprintf("Encountered unpatched connWrite\n");
         if (connWrite(slave->conn,buf,buflen) != buflen) {
             freeClientAsync(slave);
             return C_ERR;
@@ -587,6 +589,7 @@ int masterTryPartialResynchronization(client *c) {
     } else {
         buflen = snprintf(buf,sizeof(buf),"+CONTINUE\r\n");
     }
+    eprintf("Encountered unpatched connWrite\n");
     if (connWrite(c->conn,buf,buflen) != buflen) {
         freeClientAsync(c);
         return C_OK;
@@ -1017,6 +1020,7 @@ void sendBulkToSlave(connection *conn) {
      * replication process. Currently the preamble is just the bulk count of
      * the file in the form "$<length>\r\n". */
     if (slave->replpreamble) {
+        eprintf("Encountered unpatched connWrite\n");
         nwritten = connWrite(conn,slave->replpreamble,sdslen(slave->replpreamble));
         if (nwritten == -1) {
             serverLog(LL_VERBOSE,
@@ -1045,6 +1049,7 @@ void sendBulkToSlave(connection *conn) {
         freeClient(slave);
         return;
     }
+    eprintf("Encountered unpatched connWrite\n");
     if ((nwritten = connWrite(conn,buf,buflen)) == -1) {
         if (connGetState(conn) != CONN_STATE_CONNECTED) {
             serverLog(LL_WARNING,"Write error sending DB to replica: %s",
@@ -1084,6 +1089,7 @@ void rdbPipeWriteHandler(struct connection *conn) {
     serverAssert(server.rdb_pipe_bufflen>0);
     client *slave = connGetPrivateData(conn);
     int nwritten;
+    eprintf("Encountered unpatched connWrite\n");
     if ((nwritten = connWrite(conn, server.rdb_pipe_buff + slave->repldboff,
                               server.rdb_pipe_bufflen - slave->repldboff)) == -1)
     {
@@ -1173,6 +1179,7 @@ void rdbPipeReadHandler(struct aeEventLoop *eventLoop, int fd, void *clientData,
                 continue;
 
             client *slave = connGetPrivateData(conn);
+            eprintf("Encountered unpatched connWrite\n");
             if ((nwritten = connWrite(conn, server.rdb_pipe_buff, server.rdb_pipe_bufflen)) == -1) {
                 if (connGetState(conn) != CONN_STATE_CONNECTED) {
                     serverLog(LL_WARNING,"Diskless rdb transfer, write error sending DB to replica: %s",
@@ -1366,6 +1373,7 @@ void replicationSendNewlineToMaster(void) {
     if (time(NULL) != newline_sent) {
         newline_sent = time(NULL);
         /* Pinging back in this stage is best-effort. */
+        eprintf("Encountered unpatched connWrite\n");
         if (server.repl_transfer_s) connWrite(server.repl_transfer_s, "\n", 1);
     }
 }
@@ -3227,6 +3235,7 @@ void replicationCron(void) {
              server.rdb_child_type != RDB_CHILD_TYPE_SOCKET));
 
         if (is_presync) {
+            eprintf("Encountered unpatched connWrite\n");
             connWrite(slave->conn, "\n", 1);
         }
     }
