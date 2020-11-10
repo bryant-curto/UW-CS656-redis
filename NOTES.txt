@@ -12,3 +12,17 @@ Here's a few thoughts:
   - this is worth exploring by running the benchmark and see the number of commands read per client per call to read
 - otherwise, we assume that responses can be delivered in any order?
 
+Might be able to improve performance with:
+  int io_uring_register(unsigned int fd, unsigned int opcode, void *arg,unsigned int nr_args);
+
+Helpful sites:
+- https://kernel.dk/io_uring.pdf
+- https://lwn.net/Articles/776703/
+- https://thenewstack.io/how-io_uring-and-ebpf-will-revolutionize-programming-in-linux/
+- https://unixism.net/2020/04/io-uring-by-example-article-series/
+
+Sites to look at:
+- https://stackoverflow.com/a/61806870
+- http://lse.sourceforge.net/io/aio.html
+- https://github.com/python-trio/trio/issues/932
+- https://blogs.oracle.com/linux/an-introduction-to-the-io_uring-asynchronous-io-framework
