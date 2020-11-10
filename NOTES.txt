@@ -1,0 +1,14 @@
+- doesn't appear that there's an ordering between submissions unless explicitely specified by IOSQE_IO_LINK flag
+- benchmark test allows for reuse of clients but submits asynchronous commands
+  - this means that any write is going to require a copy
+- writev is returning errno 22?
+  - I'm not sure what's going on here but it may be easier to just have the server on tilly06 (where uring write is defined)
+- connection initialization is a pain as it's not a back and forth
+  - maybe just turn on uring after connection has been established (see code added to connection.c in commit adding this comment)
+- make blocking and batching command line args
+
+Here's a few thoughts:
+- we may want to have an io_uring structure per client. this makes it harder to batch syscalls unless we're getting multiple requests from clients at a given time
+  - this is worth exploring by running the benchmark and see the number of commands read per client per call to read
+- otherwise, we assume that responses can be delivered in any order?
+
