@@ -38,6 +38,10 @@
 #include <math.h>
 #include <ctype.h>
 
+//size_t CONNECT_WRITE_COUNT = 411; // This is for when we use the CLI
+size_t CONNECT_WRITE_COUNT = 2; // This is for the benchmark
+
+
 static void setProtocolError(const char *errstr, client *c);
 int postponeClientRead(client *c);
 int ProcessingEventsWhileBlocked = 0; /* See processEventsWhileBlocked(). */
@@ -101,6 +105,7 @@ void linkClient(client *c) {
 }
 
 client *createClient(connection *conn) {
+	oprintf("Creating client\n");
     client *c = zmalloc(sizeof(client));
 
     /* passing NULL as conn it is possible to create a non connected client.
@@ -182,6 +187,7 @@ client *createClient(connection *conn) {
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
     if (conn) linkClient(c);
     initClientMultiState(c);
+	c->writeCount = 0;
     return c;
 }
 
@@ -1344,12 +1350,15 @@ int writeToClient(client *c, int handler_installed) {
 
     unsigned replies = 0;
     while(clientHasPendingReplies(c)) {
-        if (replies++ > 0) {
+        if (replies++ > 0 && c->writeCount > CONNECT_WRITE_COUNT) {
             eprintf(">> Expected client to only have one reply!\n");
         }
         if (c->bufpos > 0) {
-            //nwritten = connWrite(c->conn,c->buf+c->sentlen,c->bufpos-c->sentlen);
-            nwritten = uring_connWrite(c->conn,c->buf+c->sentlen,c->bufpos-c->sentlen);
+			if (++c->writeCount <= CONNECT_WRITE_COUNT) {
+            	nwritten = connWrite(c->conn,c->buf+c->sentlen,c->bufpos-c->sentlen);
+			} else {
+            	nwritten = uring_connWrite(c->conn,c->buf+c->sentlen,c->bufpos-c->sentlen);
+			}
             if (nwritten <= 0) break;
             c->sentlen += nwritten;
             totwritten += nwritten;
@@ -1370,8 +1379,11 @@ int writeToClient(client *c, int handler_installed) {
                 continue;
             }
 
-            //nwritten = connWrite(c->conn, o->buf + c->sentlen, objlen - c->sentlen);
-            nwritten = uring_connWrite(c->conn, o->buf + c->sentlen, objlen - c->sentlen);
+			if (++c->writeCount <= CONNECT_WRITE_COUNT) {
+            	nwritten = connWrite(c->conn, o->buf + c->sentlen, objlen - c->sentlen);
+			} else {
+            	nwritten = uring_connWrite(c->conn, o->buf + c->sentlen, objlen - c->sentlen);
+			}
             if (nwritten <= 0) break;
             c->sentlen += nwritten;
             totwritten += nwritten;

@@ -25,9 +25,7 @@
 //=============================================================================
 // Stolen from https://unixism.net/2020/04/io-uring-by-example-part-1-introduction/
 
-// TODO FILX IORING_OP_WRITEV and QUEUE_DEPTH
-
-#define QUEUE_DEPTH 1
+#define QUEUE_DEPTH 16384 // This is just a very large number
 #define BLOCK_SZ    1024
 
 /* This is x86 specific */
@@ -258,6 +256,7 @@ void submit_to_sq(struct io_uring_sqe sqe, struct submitter *s) {
 
     /* Update the tail so the kernel can see it. */
     if(*sring->tail != tail) {
+        write_barrier(); // This is not in example code but in https://kernel.dk/io_uring.pdf
         *sring->tail = tail;
         write_barrier();
     }
@@ -352,18 +351,16 @@ int uring_connWrite(connection *conn, const void *data, size_t data_len) {
 	udata->conn = conn;
 	udata->expected_rval = (int)data_len;
 
-	if (udata->expected_rval != writev(conn->fd, iovecs, blocks)) {
-		eprintf("Bad write\n");
-	}
-
-	struct io_uring_sqe sqe;
-	sqe.fd = conn->fd;
-    sqe.flags = 0;
+	struct io_uring_sqe sqe = {0}; // This resolved EINVAL I was getting
     sqe.opcode = IORING_OP_WRITEV;
+    sqe.flags = 0;
+	sqe.ioprio = 0;
+	sqe.fd = conn->fd;
+    sqe.off = 0;
     sqe.addr = (unsigned long) iovecs;
     sqe.len = blocks;
-    sqe.off = 0;
     sqe.user_data = (unsigned long long) udata;
+
 
 	// Submit entry 
 	submit_to_sq(sqe, submitter);

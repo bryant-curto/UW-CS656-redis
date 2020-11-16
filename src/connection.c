@@ -167,7 +167,7 @@ static void connSocketClose(connection *conn) {
 static unsigned long long foobar = 0;
 int connSocketWrite(connection *conn, const void *data, size_t data_len) {
     int ret = write(conn->fd, data, data_len);
-    printf("%llu: Writing to client!\n", foobar++); fflush(stdout);
+    printf("%llu: non-uring writing to client! %s\n", ++foobar, (char *)data); fflush(stdout);
     if (ret < 0 && errno != EAGAIN) {
         conn->last_errno = errno;
 
