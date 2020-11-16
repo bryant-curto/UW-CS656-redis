@@ -15,6 +15,21 @@ Here's a few thoughts:
 Might be able to improve performance with:
   int io_uring_register(unsigned int fd, unsigned int opcode, void *arg,unsigned int nr_args);
 
+THINGS WORK!!
+- test PING_INLINE appears to work well (PING_BULK appears to be similar to the inline version but uses building-in function to generate ping message, which I guess results in a "builkier" payload)
+- MAKE SURE TO DISABLE CUSTOM LOGGING BEFORE TESTING
+- MAKE SURE TO ENABLE OPTIMIZATION BEFORE TESTING
+- Do we want to support pipelining? If so, easiest way may be to
+  1) check that loop calling uring_connWrite() is the only time it called before epoll
+  2) convert written text to iovecs (I believe that they're written back in order)
+  3) insert bubble between submissions to ensure that ordering of messages isn't messed up
+
+Fairness of using redis-benchmark for performance analysis: https://redis.io/topics/benchmarks
+
+Methods to test:
+- `sudo strace -c -p PID` to get info on systemcalls
+- `vmstat` to ensure that we aren't bottlenecking in other systems besides network
+
 Helpful sites:
 - https://kernel.dk/io_uring.pdf
 - https://lwn.net/Articles/776703/

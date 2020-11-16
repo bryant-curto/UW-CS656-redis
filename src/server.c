@@ -5138,7 +5138,7 @@ int main(int argc, char **argv) {
     struct timeval tv;
     int j;
 
-	uring_init(0, 1);
+	uring_init(1 /*batch*/, 1/*block*/);
 
 #ifdef REDIS_TEST
     if (argc == 3 && !strcasecmp(argv[1], "test")) {

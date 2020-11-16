@@ -33,9 +33,9 @@
 #define write_barrier() __asm__ __volatile__("":::"memory")
 
 // Test configuration variables
-char blocking;
-char batch_syscalls;
+char blocking, batch_syscalls;
 size_t submitted;
+size_t batchNum = 0; // debug logging
 
 // Store members of submission queue ring
 struct app_io_sq_ring {
@@ -310,6 +310,9 @@ int uring_connWrite(connection *conn, const void *data, size_t data_len) {
 	//	eprintf("conn->type->write not connSocketWrite\n");
 	//}
 
+    void *client = conn->private_data; /* equivalent to connGetPrivateData(conn) */
+    oprintf("Clietn %p writing in batch %zu\n", client, batchNum + 1);
+
 	// Figure out how many blocks need to be requested to
 	// store data to be written to socket
     size_t bytes_remaining = data_len;
@@ -378,10 +381,12 @@ void uring_maybeBulkSubmit(void) {
 	read_from_cq(submitter);
 
 	if (batch_syscalls && submitted > 0) {
+		oprintf("Batch %zu: submitting %zu ops\n", ++batchNum, submitted);
     	int rval =  io_uring_enter(submitter->ring_fd, submitted, 0, 0);
 		if (rval < 0 || submitted != (size_t)rval) {
 			eprintf("io_uring_enter failed with rval=%d (errno=%d)\n", rval, errno);
 		}
+		submitted = 0; // Can't forget about clearing submission count!
 	}
 }
 
