@@ -229,19 +229,23 @@ void read_from_cq(struct submitter *s) {
 
 		// Handle result based on op type
         struct user_data *udata = (struct user_data*)cqe->user_data;
-		if (IORING_OP_WRITEV == udata->op) {
-			oprintf("Wrote %s\n", (char *)((struct iovec *)((void *)udata + sizeof(struct user_data)))->iov_base);
-			// Make sure we got expected return value
-			if (udata->expected_rval != cqe->res) {
-				eprintf("Got unexpected rval! expected=%d / got=%d\n", udata->expected_rval, cqe->res);
-			}
+		if (NULL == udata) {
+			oprintf("Got NOP\n");
 		} else {
-			eprintf("Not implemented\n");
-		}
+			if (IORING_OP_WRITEV == udata->op) {
+				oprintf("Wrote %s\n", (char *)((struct iovec *)((void *)udata + sizeof(struct user_data)))->iov_base);
+				// Make sure we got expected return value
+				if (udata->expected_rval != cqe->res) {
+					eprintf("Got unexpected rval! expected=%d / got=%d\n", udata->expected_rval, cqe->res);
+				}
+			} else {
+				eprintf("Not implemented\n");
+			}
 
-		// Free data
-		for (unsigned i = 0; i < udata->num_to_free; ++i) {
-			free(udata->to_free[i]);
+			// Free data
+			for (unsigned i = 0; i < udata->num_to_free; ++i) {
+				free(udata->to_free[i]);
+			}
 		}
 
         head++;
@@ -302,6 +306,10 @@ void submit_to_sq(struct io_uring_sqe sqe, struct submitter *s) {
 
 // Variables for using io uring
 struct submitter *submitter = NULL;
+connection *last_conn = NULL;
+int last_fd = -1;
+size_t chain_len = 0;
+
 
 void uring_init(char batch, char block) {
 	batch_syscalls = batch;
@@ -318,8 +326,6 @@ void uring_init(char batch, char block) {
 	}
 }
 
-/* Interface to io uring for redis server */
-/******************************************/
 int uring_connWrite(connection *conn, const void *data, size_t data_len) {
     // Objective is to make code equivalent to return conn->type->write(conn, data, data_len);
 
@@ -375,9 +381,35 @@ int uring_connWrite(connection *conn, const void *data, size_t data_len) {
 	udata->conn = conn;
 	udata->expected_rval = (int)data_len;
 
+	// Make sure that writes to the same client don't occur out of order
+	// This way, io uring enabled redis provides desired ordering
+	// of command submissions to a given client
+	//
+	// NOTE: impl assumes that writes to same socket happen sequentially (i.e., sequential  uring_connWrite calls)
+	unsigned char flags = 0;
+	if (batch_syscalls || !blocking) {
+		if (last_fd < 0) {
+			last_conn = conn;
+			last_fd = conn->fd;
+		} else if (last_conn != conn || last_fd != conn->fd) {
+			oprintf("Breaking chain of writes of length %zu for fd %d\n", chain_len, last_fd);
+			struct io_uring_sqe sqe = {0};
+			sqe.opcode = IORING_OP_NOP;
+			sqe.flags = 0; // break chain
+			sqe.user_data = (unsigned long long)NULL;
+			submit_to_sq(sqe, submitter);
+
+			chain_len = 0;
+			last_conn = conn;
+			last_fd = conn->fd;
+		}
+		chain_len++;
+		flags = IOSQE_IO_LINK;
+	}
+
 	struct io_uring_sqe sqe = {0}; // This resolved EINVAL I was getting
     sqe.opcode = IORING_OP_WRITEV;
-    sqe.flags = 0;
+    sqe.flags = flags;
 	sqe.ioprio = 0;
 	sqe.fd = conn->fd;
     sqe.off = 0;
@@ -395,7 +427,7 @@ int uring_connWrite(connection *conn, const void *data, size_t data_len) {
 	return udata->expected_rval;
 }
 
-void uring_maybeBulkSubmit(void) {
+void uring_endOfProcessingLoop(void) {
 	if (NULL == submitter) {
 		eprintf("io uring not initialized\n");
 	}
@@ -408,9 +440,20 @@ void uring_maybeBulkSubmit(void) {
 		}
 		submitted = 0; // Can't forget about clearing submission count!
 	}
+
+	if (batch_syscalls || !blocking) {
+		// Submit bubble to ensure that writes to the same client
+		// in a later loop don't occur until after writes to client
+		// during this loop complete.
+		struct io_uring_sqe sqe = {0};
+		sqe.opcode = IORING_OP_NOP;
+		sqe.flags = IOSQE_IO_DRAIN;
+		sqe.user_data = (unsigned long long)NULL;
+		submit_to_sq(sqe, submitter);
+   }
 }
 
-void uring_processResponses(void) {
+void uring_startOfProcessingLoop(void) {
 	if (NULL == submitter) {
 		eprintf("io uring not initialized\n");
 	}

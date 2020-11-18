@@ -32,6 +32,7 @@
 
 #include "uring.h"
 
+extern char use_iouring;
 #include <stdio.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -441,7 +442,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
             tvp = &tv;
         }
 
-       uring_maybeBulkSubmit();
+        if (use_iouring) uring_endOfProcessingLoop();
 
         if (eventLoop->beforesleep != NULL && flags & AE_CALL_BEFORE_SLEEP)
             eventLoop->beforesleep(eventLoop);
@@ -454,7 +455,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         if (eventLoop->aftersleep != NULL && flags & AE_CALL_AFTER_SLEEP)
             eventLoop->aftersleep(eventLoop);
 
-       uring_processResponses();
+        if (use_iouring) uring_startOfProcessingLoop();
 
         for (j = 0; j < numevents; j++) {
             aeFileEvent *fe = &eventLoop->events[eventLoop->fired[j].fd];

@@ -38,6 +38,8 @@
 #include <math.h>
 #include <ctype.h>
 
+extern char use_iouring;
+
 //size_t CONNECT_WRITE_COUNT = 411; // This is for when we use the CLI
 size_t CONNECT_WRITE_COUNT = 2; // This is for the benchmark
 
@@ -1348,13 +1350,9 @@ int writeToClient(client *c, int handler_installed) {
     size_t objlen;
     clientReplyBlock *o;
 
-    unsigned replies = 0;
     while(clientHasPendingReplies(c)) {
-        if (replies++ > 0 && c->writeCount > CONNECT_WRITE_COUNT) {
-            eprintf(">> Expected client to only have one reply!\n");
-        }
         if (c->bufpos > 0) {
-			if (++c->writeCount <= CONNECT_WRITE_COUNT) {
+			if (!use_iouring || ++c->writeCount <= CONNECT_WRITE_COUNT) {
             	nwritten = connWrite(c->conn,c->buf+c->sentlen,c->bufpos-c->sentlen);
 			} else {
             	nwritten = uring_connWrite(c->conn,c->buf+c->sentlen,c->bufpos-c->sentlen);
@@ -1379,7 +1377,7 @@ int writeToClient(client *c, int handler_installed) {
                 continue;
             }
 
-			if (++c->writeCount <= CONNECT_WRITE_COUNT) {
+			if (!use_iouring || ++c->writeCount <= CONNECT_WRITE_COUNT) {
             	nwritten = connWrite(c->conn, o->buf + c->sentlen, objlen - c->sentlen);
 			} else {
             	nwritten = uring_connWrite(c->conn, o->buf + c->sentlen, objlen - c->sentlen);

@@ -34,6 +34,7 @@
 #include "latency.h"
 #include "atomicvar.h"
 #include "uring.h"
+#include "my_util.h"
 
 #include <time.h>
 #include <signal.h>
@@ -56,6 +57,8 @@
 #include <sys/utsname.h>
 #include <locale.h>
 #include <sys/socket.h>
+
+extern char use_iouring;
 
 /* Our shared "common" objects */
 
@@ -5138,20 +5141,30 @@ int main(int argc, char **argv) {
     struct timeval tv;
     int j;
 
-    const int custom_args = 2;
-    if (argc <= custom_args) {
-        printf("USAGE: %s BATCH:{0,1} BLOCK:{0,1} ARGS...\n", argv[0]);
-        exit(-1);
-    }
+	if (argc < 2) {
+		eprintf("USAGE: %s USE_URING:{0,1}\n", argv[0]);
+	}
+	use_iouring = atoi(argv[1]);
 
-    char batch = atoi(argv[1]);
-    char block = atoi(argv[2]);
+	int num_custom_args;
+	if (use_iouring) {
+		num_custom_args = 3;
+    	if (argc <= num_custom_args) {
+    	    eprintf("USAGE: %s USE_URING:1 BATCH:{0,1} BLOCK:{0,1} ARGS...\n", argv[0]);
+    	}
+		char batch = atoi(argv[2]);
+		char block = atoi(argv[3]);
 
-    argc -= custom_args;
-    argv[custom_args] = argv[0];
-    argv += custom_args;
+		uring_init(batch, block);
+	} else {
+		num_custom_args = 1;
+	}
 
-	uring_init(batch, block);
+	// Adjust argv for redis argv parsing
+    argc -= num_custom_args;
+    argv[num_custom_args] = argv[0];
+    argv += num_custom_args;
+
 
 #ifdef REDIS_TEST
     if (argc == 3 && !strcasecmp(argv[1], "test")) {
