@@ -22,8 +22,7 @@
 
 #include <linux/io_uring.h>
 
-//=============================================================================
-// Stolen from https://unixism.net/2020/04/io-uring-by-example-part-1-introduction/
+// Adapted from from https://unixism.net/2020/04/io-uring-by-example-part-1-introduction/
 
 #define QUEUE_DEPTH 16384 // This is just a very large number
 #define BLOCK_SZ    1024
@@ -36,6 +35,18 @@
 char blocking, batch_syscalls;
 size_t submitted;
 size_t batchNum = 0; // debug logging
+
+size_t setupCalls = 0;
+size_t enterCalls = 0;
+void printSyscalls(void) {
+    printf("<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>\n"
+		   "System Call Count:\n"
+		   "  io_uring_setup calls: %zu\n"
+		   "  io_uring_enter: %zu\n"
+		   "<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>\n",
+		   setupCalls, enterCalls);
+    fflush(stdout);
+}
 
 // Store members of submission queue ring
 struct app_io_sq_ring {
@@ -79,12 +90,14 @@ struct user_data {
  * */
 
 int io_uring_setup(unsigned entries, struct io_uring_params *p) {
+	setupCalls++;
     return (int) syscall(__NR_io_uring_setup, entries, p);
 }
 
 int io_uring_enter(int ring_fd, unsigned int to_submit,
                           unsigned int min_complete, unsigned int flags)
 {
+	enterCalls++;
     return (int) syscall(__NR_io_uring_enter, ring_fd, to_submit, min_complete,
                    flags, NULL, 0);
 }
@@ -271,6 +284,7 @@ void submit_to_sq(struct io_uring_sqe sqe, struct submitter *s) {
 		unsigned min_complete = (blocking ? 1 : 0);
 		unsigned flags = (blocking ? IORING_ENTER_GETEVENTS : 0);
     	int rval =  io_uring_enter(s->ring_fd, 1, min_complete, flags);
+		// TODO: we'll have to account for errors when server is under heavy load
 		if (1 != rval) {
 			eprintf("io_uring_enter failed with rval=%d (errno=%d)\n", rval, errno);
 		}
@@ -278,6 +292,8 @@ void submit_to_sq(struct io_uring_sqe sqe, struct submitter *s) {
 			read_from_cq(s);
 		}
 	} else {
+		// Keep track of how many have been added when we perform batch call
+		// on io_uring_enter later on.
 		++submitted;
 	}
 }
@@ -290,11 +306,16 @@ struct submitter *submitter = NULL;
 void uring_init(char batch, char block) {
 	batch_syscalls = batch;
 	blocking = block;
+	oprintf(">> Batching Enabled: %c / Blocking Enabled: %c\n", (batch ? 'y' : 'n'), (block ? 'y' : 'n'));
 	submitted = 0;
 
 	// Actually initialize io uring
 	submitter = malloc(sizeof(struct submitter));
 	app_setup_uring(submitter);
+
+	if (0 != atexit(printSyscalls)) {
+		eprintf("printSyscalls atexit failed");
+	}
 }
 
 /* Interface to io uring for redis server */
@@ -311,7 +332,7 @@ int uring_connWrite(connection *conn, const void *data, size_t data_len) {
 	//}
 
     void *client = conn->private_data; /* equivalent to connGetPrivateData(conn) */
-    oprintf("Clietn %p writing in batch %zu\n", client, batchNum + 1);
+    oprintf("Client %p writing in batch %zu\n", client, batchNum + 1);
 
 	// Figure out how many blocks need to be requested to
 	// store data to be written to socket
