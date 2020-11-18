@@ -1,9 +1,12 @@
 - doesn't appear that there's an ordering between submissions unless explicitely specified by IOSQE_IO_LINK flag
+  - The idea now is to batch writes by a client into one submission entry if performing batching. Then, add in a bubble (NOOP + _) after submitting the batch to make sure ordering isn't broke.
+  - Must maintain ordering: https://redis.io/topics/pipelining
 - benchmark test allows for reuse of clients but submits asynchronous commands
   - this means that any write is going to require a copy
-- writev is returning errno 22?
+  - I think that this is acceptible
+X writev is returning errno 22? (Issue resolved by zeroing out submission queue entry struct)
   - I'm not sure what's going on here but it may be easier to just have the server on tilly06 (where uring write is defined)
-- connection initialization is a pain as it's not a back and forth
+X connection initialization is a pain as it's not a back and forth (resolved by not using IO uring for the first few writes)
   - maybe just turn on uring after connection has been established (see code added to connection.c in commit adding this comment)
 - make blocking and batching command line args
 
@@ -25,10 +28,16 @@ THINGS WORK!!
   3) insert bubble between submissions to ensure that ordering of messages isn't messed up
 
 Fairness of using redis-benchmark for performance analysis: https://redis.io/topics/benchmarks
+- i.e. use pipelining
 
 Methods to test:
-- `sudo strace -c -p PID` to get info on systemcalls
-- `vmstat` to ensure that we aren't bottlenecking in other systems besides network
+- `sudo strace -c -p PID` to get info on the number of system calls
+  - we can then break that down into reads, writes, io uring submit
+- make sure we're not bottlenecked by resources:
+  - vmstat for memory (see swap pages)
+  - vmstat + htop for cpu usage
+  - Write script to calculate inferface saturation using `/sys/class/net/ibo3d1/statistics/{rx_bytes,tx_bytes}`
+- redis-benchmark to get throughput (see fairness in benchmarking redis above)
 
 Helpful sites:
 - https://kernel.dk/io_uring.pdf
