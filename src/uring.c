@@ -399,7 +399,6 @@ void uring_maybeBulkSubmit(void) {
 	if (NULL == submitter) {
 		eprintf("io uring not initialized\n");
 	}
-	read_from_cq(submitter);
 
 	if (batch_syscalls && submitted > 0) {
 		oprintf("Batch %zu: submitting %zu ops\n", ++batchNum, submitted);
