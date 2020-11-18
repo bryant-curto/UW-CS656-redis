@@ -5138,7 +5138,20 @@ int main(int argc, char **argv) {
     struct timeval tv;
     int j;
 
-	uring_init(1 /*batch*/, 1/*block*/);
+    const int custom_args = 2;
+    if (argc <= custom_args) {
+        printf("USAGE: %s BATCH:{0,1} BLOCK:{0,1} ARGS...\n", argv[0]);
+        exit(-1);
+    }
+
+    char batch = atoi(argv[1]);
+    char block = atoi(argv[2]);
+
+    argc -= custom_args;
+    argv[custom_args] = argv[0];
+    argv += custom_args;
+
+	uring_init(batch, block);
 
 #ifdef REDIS_TEST
     if (argc == 3 && !strcasecmp(argv[1], "test")) {
