@@ -35,6 +35,7 @@
 char blocking, batch_syscalls;
 size_t batchSize = 0;
 size_t batchNum = 0; // debug logging
+
 // Count number of non-NOP entries submitted each time around multiplexer (e.g., poll, epoll, select)
 // used to determine if IOSQE_IO_DRAIN needs to be submitted
 size_t submittedInLoop = 0;
@@ -434,11 +435,6 @@ void uring_clientWriteDone(void) {
 	}
 
 	if (batch_syscalls || !blocking) {
-		if (batch_syscalls) {
-			batchSize++;
-		} else {
-			extraEntries++;
-		}
 		oprintf("Breaking chain of writes of length %zu\n", chain_len);
 		chain_len = 0;
 
@@ -447,6 +443,12 @@ void uring_clientWriteDone(void) {
 		sqe.flags = 0; // break chain
 		sqe.user_data = (unsigned long long)NULL;
 		submit_to_sq_no_enter(sqe, submitter);
+
+		if (batch_syscalls) {
+			batchSize++;
+		} else {
+			extraEntries++;
+		}
 	}
 }
 

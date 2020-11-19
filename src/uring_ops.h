@@ -6,5 +6,6 @@
 
 struct connection;
 int uring_connWrite(connection *conn, const void *data, size_t data_len);
+void uring_clientWriteDone(void);
 
 #endif //__URING_OPS__

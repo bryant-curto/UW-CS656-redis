@@ -1350,12 +1350,14 @@ int writeToClient(client *c, int handler_installed) {
     size_t objlen;
     clientReplyBlock *o;
 
+    char wrote = 0;
     while(clientHasPendingReplies(c)) {
         if (c->bufpos > 0) {
 			if (!use_iouring || ++c->writeCount <= CONNECT_WRITE_COUNT) {
             	nwritten = connWrite(c->conn,c->buf+c->sentlen,c->bufpos-c->sentlen);
 			} else {
             	nwritten = uring_connWrite(c->conn,c->buf+c->sentlen,c->bufpos-c->sentlen);
+				wrote = 1;
 			}
             if (nwritten <= 0) break;
             c->sentlen += nwritten;
@@ -1381,6 +1383,7 @@ int writeToClient(client *c, int handler_installed) {
             	nwritten = connWrite(c->conn, o->buf + c->sentlen, objlen - c->sentlen);
 			} else {
             	nwritten = uring_connWrite(c->conn, o->buf + c->sentlen, objlen - c->sentlen);
+				wrote = 1;
 			}
             if (nwritten <= 0) break;
             c->sentlen += nwritten;
@@ -1422,6 +1425,7 @@ int writeToClient(client *c, int handler_installed) {
             serverLog(LL_VERBOSE,
                 "Error writing to client: %s", connGetLastError(c->conn));
             freeClientAsync(c);
+			if (use_iouring && wrote) uring_clientWriteDone();
             return C_ERR;
         }
     }
@@ -1443,9 +1447,11 @@ int writeToClient(client *c, int handler_installed) {
         /* Close connection after entire reply has been sent. */
         if (c->flags & CLIENT_CLOSE_AFTER_REPLY) {
             freeClientAsync(c);
+			if (use_iouring && wrote) uring_clientWriteDone();
             return C_ERR;
         }
     }
+	if (use_iouring && wrote) uring_clientWriteDone();
     return C_OK;
 }
 

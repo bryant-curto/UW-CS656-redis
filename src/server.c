@@ -59,6 +59,13 @@
 #include <sys/socket.h>
 
 extern char use_iouring;
+extern size_t iouringWriteCalls;
+extern size_t iouringSetupCalls;
+extern size_t iouringEnterCalls;
+extern size_t writeCalls;
+
+extern size_t iouringEnterToSubmit;
+extern size_t iouringActuallySubmitted;
 
 /* Our shared "common" objects */
 
@@ -5137,6 +5144,19 @@ int iAmMaster(void) {
             (server.cluster_enabled && nodeIsMaster(server.cluster->myself)));
 }
 
+void printCallCounts(void) {
+    printf("<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>\n"
+		   "Call Counts:\n"
+		   "  io_uring write calls: %zu\n"
+		   "  io_uring_setup calls: %zu\n"
+		   "  io_uring_enter calls: %zu\n"
+		   "  write calls: %zu\n"
+		   "<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>\n",
+		   iouringWriteCalls, iouringSetupCalls, iouringEnterCalls, writeCalls);
+	printf("io_uring_enter(to_submit = %zu) / actually submitted = %zu\n", iouringEnterToSubmit, iouringActuallySubmitted);
+    fflush(stdout);
+}
+
 int main(int argc, char **argv) {
     struct timeval tv;
     int j;
@@ -5158,6 +5178,11 @@ int main(int argc, char **argv) {
 		uring_init(batch, block);
 	} else {
 		num_custom_args = 1;
+	}
+
+	// Log number of each type of call at end
+	if (0 != atexit(printCallCounts)) {
+		eprintf("setting printCallCounts for atexit failed");
 	}
 
 	// Adjust argv for redis argv parsing
