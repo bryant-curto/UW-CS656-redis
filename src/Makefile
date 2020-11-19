@@ -64,7 +64,7 @@ endif
 FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DEBUG) $(CFLAGS) $(REDIS_CFLAGS)
 FINAL_LDFLAGS=$(LDFLAGS) $(REDIS_LDFLAGS) $(DEBUG)
 FINAL_LIBS=-lm
-DEBUG=-g -ggdb -p
+DEBUG=-g -ggdb
 
 # Linux ARM needs -latomic at linking time
 ifneq (,$(filter aarch64 armv,$(uname_M)))
