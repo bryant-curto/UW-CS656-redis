@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
@@ -12,7 +13,6 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <errno.h>
-
 
 #include "my_util.h"
 #include "sds.h"
@@ -33,20 +33,24 @@
 
 // Test configuration variables
 char blocking, batch_syscalls;
-size_t submitted;
+size_t batchSize = 0;
 size_t batchNum = 0; // debug logging
+// Count number of non-NOP entries submitted each time around multiplexer (e.g., poll, epoll, select)
+// used to determine if IOSQE_IO_DRAIN needs to be submitted
+size_t submittedInLoop = 0;
+// Used to account for extra submission entries (i.e., NOPs) when not blocking and not batching.
+// If not blocking and not batching, account for extra entries on next entry submission.
+// If not batching and batching, account for extra entries in batchSize
+size_t extraEntries = 0;
 
-size_t setupCalls = 0;
-size_t enterCalls = 0;
-void printSyscalls(void) {
-    printf("<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>\n"
-		   "System Call Count:\n"
-		   "  io_uring_setup calls: %zu\n"
-		   "  io_uring_enter: %zu\n"
-		   "<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>\n",
-		   setupCalls, enterCalls);
-    fflush(stdout);
-}
+extern size_t iouringWriteCalls;
+extern size_t iouringSetupCalls;
+extern size_t iouringEnterCalls;
+
+// Sanity check that number reported to io_uring_enter as submitted
+// was actually submitted
+size_t iouringEnterToSubmit = 0;
+size_t iouringActuallySubmitted = 0;
 
 // Store members of submission queue ring
 struct app_io_sq_ring {
@@ -90,14 +94,15 @@ struct user_data {
  * */
 
 int io_uring_setup(unsigned entries, struct io_uring_params *p) {
-	setupCalls++;
+	iouringSetupCalls++;
     return (int) syscall(__NR_io_uring_setup, entries, p);
 }
 
 int io_uring_enter(int ring_fd, unsigned int to_submit,
                           unsigned int min_complete, unsigned int flags)
 {
-	enterCalls++;
+	iouringEnterCalls++;
+	iouringEnterToSubmit += to_submit;
     return (int) syscall(__NR_io_uring_enter, ring_fd, to_submit, min_complete,
                    flags, NULL, 0);
 }
@@ -256,7 +261,7 @@ void read_from_cq(struct submitter *s) {
 }
 
 // Submit requests to the submission queue.
-void submit_to_sq(struct io_uring_sqe sqe, struct submitter *s) {
+void submit_to_sq_no_enter_helper(struct io_uring_sqe sqe, struct submitter *s, char override_do_not_io_uring_enter) {
     struct app_io_sq_ring *sring = &s->sq_ring;
 
     /* Add our submission queue entry to the tail of the SQE ring buffer */
@@ -277,6 +282,7 @@ void submit_to_sq(struct io_uring_sqe sqe, struct submitter *s) {
         *sring->tail = tail;
         write_barrier();
     }
+	iouringActuallySubmitted++;
 
     /*
      * Tell the kernel we have submitted events with the io_uring_enter() system
@@ -284,30 +290,39 @@ void submit_to_sq(struct io_uring_sqe sqe, struct submitter *s) {
      * io_uring_enter() call to wait until min_complete events (the 3rd param)
      * complete.
      * */
-    if (!batch_syscalls) {
-		unsigned min_complete = (blocking ? 1 : 0);
-		unsigned flags = (blocking ? IORING_ENTER_GETEVENTS : 0);
-    	int rval =  io_uring_enter(s->ring_fd, 1, min_complete, flags);
-		// TODO: we'll have to account for errors when server is under heavy load
-		if (1 != rval) {
-			eprintf("io_uring_enter failed with rval=%d (errno=%d)\n", rval, errno);
+	if (!override_do_not_io_uring_enter) {
+	    if (!batch_syscalls) {
+			unsigned min_complete = (blocking ? 1 : 0);
+			unsigned flags = (blocking ? IORING_ENTER_GETEVENTS : 0);
+			unsigned submitting = (blocking ? 1 : 1 + extraEntries);
+			int rval =  io_uring_enter(s->ring_fd, submitting, min_complete, flags);
+			// TODO: we'll have to account for errors when server is under heavy load
+			if (submitting != rval) {
+				eprintf("io_uring_enter failed with rval=%d, expected=%d (errno=%d)\n", rval, submitting, errno);
+			}
+			if (blocking) {
+				read_from_cq(s);
+			} else {
+				extraEntries = 0;
+			}
+		} else {
+			// Keep track of how many have been added when we perform batch call
+			// on io_uring_enter later on.
+			++batchSize;
 		}
-		if (blocking) {
-			read_from_cq(s);
-		}
-	} else {
-		// Keep track of how many have been added when we perform batch call
-		// on io_uring_enter later on.
-		++submitted;
 	}
 }
 
+void submit_to_sq(struct io_uring_sqe sqe, struct submitter *s) {
+	submit_to_sq_no_enter_helper(sqe, s, 0 /* do NOT override default behavior in calling io_uring_enter */);
+}
 
+void submit_to_sq_no_enter(struct io_uring_sqe sqe, struct submitter *s) {
+	submit_to_sq_no_enter_helper(sqe, s, 1 /* DO override default behavior in calling io_uring_enter */);
+}
 
 // Variables for using io uring
 struct submitter *submitter = NULL;
-connection *last_conn = NULL;
-int last_fd = -1;
 size_t chain_len = 0;
 
 
@@ -315,18 +330,15 @@ void uring_init(char batch, char block) {
 	batch_syscalls = batch;
 	blocking = block;
 	oprintf(">> Batching Enabled: %c / Blocking Enabled: %c\n", (batch ? 'y' : 'n'), (block ? 'y' : 'n'));
-	submitted = 0;
+	batchSize = 0;
 
 	// Actually initialize io uring
 	submitter = malloc(sizeof(struct submitter));
 	app_setup_uring(submitter);
-
-	if (0 != atexit(printSyscalls)) {
-		eprintf("printSyscalls atexit failed");
-	}
 }
 
 int uring_connWrite(connection *conn, const void *data, size_t data_len) {
+	iouringWriteCalls++;
     // Objective is to make code equivalent to return conn->type->write(conn, data, data_len);
 
 	// Perform sanity checks
@@ -382,27 +394,16 @@ int uring_connWrite(connection *conn, const void *data, size_t data_len) {
 	udata->expected_rval = (int)data_len;
 
 	// Make sure that writes to the same client don't occur out of order
+	// by linking all of the write to a single client in an iteration of
+	// processing loop into a chacin.
 	// This way, io uring enabled redis provides desired ordering
 	// of command submissions to a given client
 	//
-	// NOTE: impl assumes that writes to same socket happen sequentially (i.e., sequential  uring_connWrite calls)
+	// NOTE: impl assumes that uring_clientWriteDone is called when all writes
+	// to client are done for this processing loop iteration.
 	unsigned char flags = 0;
 	if (batch_syscalls || !blocking) {
-		if (last_fd < 0) {
-			last_conn = conn;
-			last_fd = conn->fd;
-		} else if (last_conn != conn || last_fd != conn->fd) {
-			oprintf("Breaking chain of writes of length %zu for fd %d\n", chain_len, last_fd);
-			struct io_uring_sqe sqe = {0};
-			sqe.opcode = IORING_OP_NOP;
-			sqe.flags = 0; // break chain
-			sqe.user_data = (unsigned long long)NULL;
-			submit_to_sq(sqe, submitter);
-
-			chain_len = 0;
-			last_conn = conn;
-			last_fd = conn->fd;
-		}
+		submittedInLoop++;
 		chain_len++;
 		flags = IOSQE_IO_LINK;
 	}
@@ -427,21 +428,36 @@ int uring_connWrite(connection *conn, const void *data, size_t data_len) {
 	return udata->expected_rval;
 }
 
+void uring_clientWriteDone(void) {
+	if (NULL == submitter) {
+		eprintf("io uring not initialized\n");
+	}
+
+	if (batch_syscalls || !blocking) {
+		if (batch_syscalls) {
+			batchSize++;
+		} else {
+			extraEntries++;
+		}
+		oprintf("Breaking chain of writes of length %zu\n", chain_len);
+		chain_len = 0;
+
+		struct io_uring_sqe sqe = {0};
+		sqe.opcode = IORING_OP_NOP;
+		sqe.flags = 0; // break chain
+		sqe.user_data = (unsigned long long)NULL;
+		submit_to_sq_no_enter(sqe, submitter);
+	}
+}
+
 void uring_endOfProcessingLoop(void) {
 	if (NULL == submitter) {
 		eprintf("io uring not initialized\n");
 	}
 
-	if (batch_syscalls && submitted > 0) {
-		oprintf("Batch %zu: submitting %zu ops\n", ++batchNum, submitted);
-    	int rval =  io_uring_enter(submitter->ring_fd, submitted, 0, 0);
-		if (rval < 0 || submitted != (size_t)rval) {
-			eprintf("io_uring_enter failed with rval=%d (errno=%d)\n", rval, errno);
-		}
-		submitted = 0; // Can't forget about clearing submission count!
-	}
+	if ((batch_syscalls || !blocking) && submittedInLoop > 0) {
+		oprintf("Inserting bubble\n");
 
-	if (batch_syscalls || !blocking) {
 		// Submit bubble to ensure that writes to the same client
 		// in a later loop don't occur until after writes to client
 		// during this loop complete.
@@ -449,8 +465,24 @@ void uring_endOfProcessingLoop(void) {
 		sqe.opcode = IORING_OP_NOP;
 		sqe.flags = IOSQE_IO_DRAIN;
 		sqe.user_data = (unsigned long long)NULL;
-		submit_to_sq(sqe, submitter);
+		submit_to_sq_no_enter(sqe, submitter);
+
+		if (batch_syscalls) {
+			batchSize++;
+		} else {
+			extraEntries++;
+		}
+		submittedInLoop = 0;
    }
+
+	if (batch_syscalls && batchSize > 0) {
+		oprintf("Batch %zu: submitting %zu ops\n", ++batchNum, batchSize);
+		int rval =  io_uring_enter(submitter->ring_fd, batchSize, 0, 0);
+		if (rval < 0 || batchSize != (size_t)rval) {
+			eprintf("io_uring_enter failed with rval=%d, expected=%zu (errno=%d)\n", rval, batchSize, errno);
+		}
+		batchSize = 0; // Can't forget about clearing submission count!
+	}
 }
 
 void uring_startOfProcessingLoop(void) {
