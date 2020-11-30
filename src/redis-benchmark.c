@@ -60,6 +60,11 @@
 #define CLIENT_GET_EVENTLOOP(c) \
     (c->thread_id >= 0 ? config.threads[c->thread_id]->el : config.el)
 
+long long prev_throughput_time;
+int prev_requests_finished = 0;
+volatile unsigned char barrior = 0;
+volatile unsigned char start_test = 0;
+
 struct benchmarkThread;
 struct clusterNode;
 struct redisConfig;
@@ -107,13 +112,13 @@ static struct config {
     int slots_last_update;
     int enable_tracking;
     /* Thread mutexes to be used as fallbacks by atomicvar.h */
-    pthread_mutex_t requests_issued_mutex;
-    pthread_mutex_t requests_finished_mutex;
+    //pthread_mutex_t requests_issued_mutex;
+    //pthread_mutex_t requests_finished_mutex;
     pthread_mutex_t liveclients_mutex;
-    pthread_mutex_t is_fetching_slots_mutex;
+    //pthread_mutex_t is_fetching_slots_mutex;
     pthread_mutex_t is_updating_slots_mutex;
-    pthread_mutex_t updating_slots_mutex;
-    pthread_mutex_t slots_last_update_mutex;
+    //pthread_mutex_t updating_slots_mutex;
+    //pthread_mutex_t slots_last_update_mutex;
 } config;
 
 typedef struct _client {
@@ -190,6 +195,7 @@ static int fetchClusterSlotsConfiguration(client c);
 static void updateClusterSlotsConfiguration();
 int showThroughput(struct aeEventLoop *eventLoop, long long id,
                    void *clientData);
+int isDone(struct aeEventLoop *eventLoop, long long id, void *clientData);
 
 /* Dict callbacks */
 static uint64_t dictSdsHash(const void *key);
@@ -531,6 +537,7 @@ static void readHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
                     }
                     continue;
                 }
+                // Update requests_finished
                 int requests_finished = 0;
                 atomicGetIncr(config.requests_finished, requests_finished, 1);
                 if (requests_finished < config.requests)
@@ -572,6 +579,7 @@ static void writeHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     }
     if (sdslen(c->obuf) > c->written) {
         void *ptr = c->obuf+c->written;
+        // Actualy uses write() syscall
         ssize_t nwritten = write(c->context->fd,ptr,sdslen(c->obuf)-c->written);
         if (nwritten == -1) {
             if (errno != EPIPE)
@@ -893,6 +901,10 @@ static void startBenchmarkThreads() {
             exit(1);
         }
     }
+    while (barrior < config.num_threads) ;
+    printf("Starting Test\n");
+    fflush(stdout);
+    start_test = 1;
     for (i = 0; i < config.num_threads; i++)
         pthread_join(config.threads[i]->thread, NULL);
 }
@@ -910,7 +922,7 @@ static void benchmark(char *title, char *cmd, int len) {
     c = createClient(cmd,len,NULL,thread_id);
     createMissingClients(c);
 
-    config.start = mstime();
+    prev_throughput_time = config.start = mstime();
     if (!config.num_threads) aeMain(config.el);
     else startBenchmarkThreads();
     config.totlatency = mstime()-config.start;
@@ -922,12 +934,16 @@ static void benchmark(char *title, char *cmd, int len) {
 
 /* Thread functions. */
 
+
+
 static benchmarkThread *createBenchmarkThread(int index) {
     benchmarkThread *thread = zmalloc(sizeof(*thread));
     if (thread == NULL) return NULL;
     thread->index = index;
     thread->el = aeCreateEventLoop(1024*10);
-    aeCreateTimeEvent(thread->el,1,showThroughput,NULL,NULL);
+    if (index == 0)
+        aeCreateTimeEvent(thread->el,1000,showThroughput,NULL,NULL);
+    aeCreateTimeEvent(thread->el,1,isDone,NULL,NULL);
     return thread;
 }
 
@@ -948,6 +964,9 @@ static void freeBenchmarkThreads() {
 
 static void *execBenchmarkThread(void *ptr) {
     benchmarkThread *thread = (benchmarkThread *) ptr;
+	atomicIncr(barrior, 1);
+    //printf("barrior: %d\n", (int)barrior); fflush(stdout);
+    while (!start_test) ;
     aeMain(thread->el);
     return NULL;
 }
@@ -1469,7 +1488,7 @@ usage:
     exit(exit_status);
 }
 
-int showThroughput(struct aeEventLoop *eventLoop, long long id, void *clientData) {
+int isDone(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     UNUSED(eventLoop);
     UNUSED(id);
     UNUSED(clientData);
@@ -1486,17 +1505,39 @@ int showThroughput(struct aeEventLoop *eventLoop, long long id, void *clientData
         aeStop(eventLoop);
         return AE_NOMORE;
     }
+    return 250;
+}
+
+int showThroughput(struct aeEventLoop *eventLoop, long long id, void *clientData) {
+    UNUSED(eventLoop);
+    UNUSED(id);
+    UNUSED(clientData);
+    int liveclients = 0;
+    int requests_finished = 0;
+    atomicGet(config.liveclients, liveclients);
+    atomicGet(config.requests_finished, requests_finished);
+
+    if (liveclients == 0 && requests_finished != config.requests) {
+        fprintf(stderr,"All clients disconnected... aborting.\n");
+        exit(1);
+    }
     if (config.csv) return 250;
     if (config.idlemode == 1) {
         printf("clients: %d\r", config.liveclients);
         fflush(stdout);
 	return 250;
     }
-    float dt = (float)(mstime()-config.start)/1000.0;
-    float rps = (float)requests_finished/dt;
-    printf("%s: %.2f\r", config.title, rps);
+    long long cur_throughput_time = mstime();
+    float dt = (float)(cur_throughput_time - prev_throughput_time)/1000.0;
+    float rps = (float)(requests_finished - prev_requests_finished)/dt;
+    printf("%s (%f - %f): %.2f\n", config.title, prev_throughput_time/1000., cur_throughput_time/1000., rps);
     fflush(stdout);
-    return 250; /* every 250ms */
+
+    prev_throughput_time = cur_throughput_time;
+    prev_requests_finished = requests_finished;
+
+    return 1000;
+    //return 250; /* every 250ms */
 }
 
 /* Return true if the named test was selected using the -t command line
@@ -1528,7 +1569,7 @@ int main(int argc, const char **argv) {
     config.requests = 100000;
     config.liveclients = 0;
     config.el = aeCreateEventLoop(1024*10);
-    aeCreateTimeEvent(config.el,1,showThroughput,NULL,NULL);
+    aeCreateTimeEvent(config.el,1,isDone,NULL,NULL);
     config.keepalive = 1;
     config.datasize = 3;
     config.pipeline = 1;
@@ -1617,13 +1658,13 @@ int main(int argc, const char **argv) {
     }
 
     if (config.num_threads > 0) {
-        pthread_mutex_init(&(config.requests_issued_mutex), NULL);
-        pthread_mutex_init(&(config.requests_finished_mutex), NULL);
+        //pthread_mutex_init(&(config.requests_issued_mutex), NULL);
+        //pthread_mutex_init(&(config.requests_finished_mutex), NULL);
         pthread_mutex_init(&(config.liveclients_mutex), NULL);
-        pthread_mutex_init(&(config.is_fetching_slots_mutex), NULL);
+        //pthread_mutex_init(&(config.is_fetching_slots_mutex), NULL);
         pthread_mutex_init(&(config.is_updating_slots_mutex), NULL);
-        pthread_mutex_init(&(config.updating_slots_mutex), NULL);
-        pthread_mutex_init(&(config.slots_last_update_mutex), NULL);
+        //pthread_mutex_init(&(config.updating_slots_mutex), NULL);
+        //pthread_mutex_init(&(config.slots_last_update_mutex), NULL);
     }
 
     if (config.keepalive == 0) {
