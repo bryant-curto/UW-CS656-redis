@@ -32,7 +32,7 @@
 #define write_barrier() __asm__ __volatile__("":::"memory")
 
 // Test configuration variables
-char blocking, batch_syscalls;
+char blocking, batch_syscalls, pipelining;
 size_t batchSize = 0;
 size_t batchNum = 0; // debug logging
 
@@ -327,10 +327,12 @@ struct submitter *submitter = NULL;
 size_t chain_len = 0;
 
 
-void uring_init(char batch, char block) {
+void uring_init(char batch, char block, char pipeline) {
 	batch_syscalls = batch;
 	blocking = block;
-	oprintf(">> Batching Enabled: %c / Blocking Enabled: %c\n", (batch ? 'y' : 'n'), (block ? 'y' : 'n'));
+	pipelining = pipeline;
+	oprintf(">> Batching Enabled: %c / Blocking Enabled: %c / Support Pipelining: %c\n",
+			(batch ? 'y' : 'n'), (block ? 'y' : 'n'), (pipelining ? 'y' : 'n'));
 	batchSize = 0;
 
 	// Actually initialize io uring
@@ -465,7 +467,7 @@ void uring_endOfProcessingLoop(void) {
 		// during this loop complete.
 		struct io_uring_sqe sqe = {0};
 		sqe.opcode = IORING_OP_NOP;
-		sqe.flags = IOSQE_IO_DRAIN;
+		sqe.flags = (pipelining ? IOSQE_IO_DRAIN : 0);
 		sqe.user_data = (unsigned long long)NULL;
 		submit_to_sq_no_enter(sqe, submitter);
 

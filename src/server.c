@@ -5158,24 +5158,39 @@ void printCallCounts(void) {
 }
 
 int main(int argc, char **argv) {
+    oprintf("====== MAKE SURE TO USE MODIFIED redis.conf!!! ======\n");
     struct timeval tv;
     int j;
 
+	int num_custom_args = 1;
 	if (argc < 2) {
 		eprintf("USAGE: %s USE_URING:{0,1}\n", argv[0]);
 	}
-	use_iouring = atoi(argv[1]);
+	use_iouring = atoi(argv[num_custom_args]);
 
-	int num_custom_args;
 	if (use_iouring) {
-		num_custom_args = 3;
-    	if (argc <= num_custom_args) {
-    	    eprintf("USAGE: %s USE_URING:1 BATCH:{0,1} BLOCK:{0,1} ARGS...\n", argv[0]);
-    	}
-		char batch = atoi(argv[2]);
-		char block = atoi(argv[3]);
+		num_custom_args += 1;
+		if (argc <= num_custom_args) {
+			eprintf("USAGE: %s USE_URING:1 PIPELINING:{0,1} ARGS...\n", argv[0]);
+		}
+		char pipelining = atoi(argv[num_custom_args]);
 
-		uring_init(batch, block);
+		num_custom_args += 1;
+		if (argc <= num_custom_args) {
+			eprintf("USAGE: %s USE_URING:1 PIPELINING:%d BLOCK:{0,1} ARGS...\n", argv[0], (int)pipelining);
+		}
+		char block = atoi(argv[num_custom_args]);
+		char batch = 0;
+
+		if (!block) {
+			num_custom_args += 1;
+			if (argc <= num_custom_args) {
+				eprintf("USAGE: %s USE_URING:1 PIPELINING:%d BLOCK:0 BATCH:{0,1} ARGS...\n", argv[0], (int)pipelining);
+			}
+			batch = atoi(argv[num_custom_args]);
+		}
+
+		uring_init(batch, block, pipelining);
 	} else {
 		num_custom_args = 1;
 	}
