@@ -30,6 +30,7 @@
 #include "server.h"
 #include "bio.h"
 #include "rio.h"
+#include "my-defs.h"
 
 #include <signal.h>
 #include <fcntl.h>
@@ -672,6 +673,7 @@ void feedAppendOnlyFile(struct redisCommand *cmd, int dictid, robj **argv, int a
  * order to load the append only file we need to create a fake client. */
 struct client *createAOFClient(void) {
     struct client *c = zmalloc(sizeof(*c));
+    NOT_IMPLEMENTED;
 
     selectDb(c,0);
     c->id = CLIENT_ID_AOF; /* So modules can identify it's the AOF client. */
@@ -738,6 +740,7 @@ void freeFakeClient(struct client *c) {
  * fatal error an error message is logged and the program exists. */
 int loadAppendOnlyFile(char *filename) {
     struct client *fakeClient;
+    NOT_IMPLEMENTED;
     FILE *fp = fopen(filename,"r");
     struct redis_stat sb;
     int old_aof_state = server.aof_state;

@@ -28,6 +28,7 @@
 
 #include "server.h"
 #include "cluster.h"
+#include "my-defs.h"
 
 /* ========================== Clients timeouts ============================= */
 
@@ -143,6 +144,7 @@ void handleBlockedClientsTimeout(void) {
     while(raxNext(&ri)) {
         uint64_t timeout;
         client *c;
+        NOT_IMPLEMENTED;
         decodeTimeoutKey(ri.key,&timeout,&c);
         if (timeout >= now) break; /* All the timeouts are in the future. */
         c->flags &= ~CLIENT_IN_TO_TABLE;

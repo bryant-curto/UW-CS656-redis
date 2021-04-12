@@ -29,6 +29,8 @@
 
 #include "server.h"
 #include "connhelpers.h"
+#include "my-defs.h"
+#include <assert.h>
 
 /* The connections module provides a lean abstraction of network connections
  * to avoid direct socket and async event management across the Redis code base.
@@ -164,6 +166,13 @@ static void connSocketClose(connection *conn) {
 }
 
 static int connSocketWrite(connection *conn, const void *data, size_t data_len) {
+#ifdef MY_DEBUG
+        const char tmp = ((char *)data)[data_len];
+        ((char *)data)[data_len] = '\0';
+        myprintf("Writing: %s\n", (char *)data);
+        ((char *)data)[data_len] = tmp;
+#endif
+
     int ret = write(conn->fd, data, data_len);
     if (ret < 0 && errno != EAGAIN) {
         conn->last_errno = errno;

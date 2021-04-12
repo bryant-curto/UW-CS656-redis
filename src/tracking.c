@@ -29,6 +29,7 @@
  */
 
 #include "server.h"
+#include "my-defs.h"
 
 /* The tracking table is constituted by a radix tree of keys, each pointing
  * to a radix tree of client IDs, used to track the clients that may have
@@ -260,6 +261,7 @@ void trackingRememberKeys(client *c) {
  * - Following a flush command, to send a single RESP NULL to indicate
  *   that all keys are now invalid. */
 void sendTrackingMessage(client *c, char *keyname, size_t keylen, int proto) {
+    NOT_IMPLEMENTED;
     int using_redirection = 0;
     if (c->client_tracking_redirection) {
         client *redir = lookupClientByID(c->client_tracking_redirection);
@@ -349,6 +351,7 @@ void trackingRememberKeyToBroadcast(client *c, char *keyname, size_t keylen) {
  * otherwise miss the fact we are no longer tracking the key for them. */
 void trackingInvalidateKeyRaw(client *c, char *key, size_t keylen, int bcast) {
     if (TrackingTable == NULL) return;
+    NOT_IMPLEMENTED;
 
     if (bcast && raxSize(PrefixTable) > 0)
         trackingRememberKeyToBroadcast(c,key,keylen);
@@ -418,9 +421,11 @@ void freeTrackingRadixTree(rax *rt) {
 /* A RESP NULL is sent to indicate that all keys are invalid */
 void trackingInvalidateKeysOnFlush(int async) {
     if (server.tracking_clients) {
+        NOT_IMPLEMENTED;
         listNode *ln;
         listIter li;
         listRewind(server.clients,&li);
+        NOT_IMPLEMENTED;
         while ((ln = listNext(&li)) != NULL) {
             client *c = listNodeValue(ln);
             if (c->flags & CLIENT_TRACKING) {
@@ -562,6 +567,7 @@ void trackingBroadcastInvalidationMessages(void) {
             raxSeek(&ri2,"^",NULL,0);
             while(raxNext(&ri2)) {
                 client *c;
+                NOT_IMPLEMENTED;
                 memcpy(&c,ri2.key,sizeof(c));
                 if (c->flags & CLIENT_TRACKING_NOLOOP) {
                     /* This client may have certain keys excluded. */

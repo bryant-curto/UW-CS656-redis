@@ -32,6 +32,7 @@
 #include "server.h"
 #include "cluster.h"
 #include "bio.h"
+#include "my-defs.h"
 
 #include <sys/time.h>
 #include <unistd.h>
@@ -57,6 +58,7 @@ int RDBGeneratedByReplication = 0;
  * IP address and its listening port which is more clear for the user, for
  * example: "Closing connection with replica 10.1.2.3:6380". */
 char *replicationGetSlaveName(client *c) {
+    NOT_IMPLEMENTED;
     static char buf[NET_HOST_PORT_STR_LEN];
     char ip[NET_IP_STR_LEN];
 
@@ -199,6 +201,7 @@ void feedReplicationBacklogWithObject(robj *o) {
 }
 
 int canFeedReplicaReplBuffer(client *replica) {
+    NOT_IMPLEMENTED;
     /* Don't feed replicas that only want the RDB. */
     if (replica->flags & CLIENT_REPL_RDBONLY) return 0;
 
@@ -232,6 +235,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
 
     /* We can't have slaves attached and no backlog. */
     serverAssert(!(listLength(slaves) != 0 && server.repl_backlog == NULL));
+    NOT_IMPLEMENTED;
 
     /* Send SELECT command to every slave if needed. */
     if (server.slaveseldb != dictid) {
@@ -257,6 +261,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
         listRewind(slaves,&li);
         while((ln = listNext(&li))) {
             client *slave = ln->value;
+            NOT_IMPLEMENTED;
 
             if (!canFeedReplicaReplBuffer(slave)) continue;
             addReply(slave,selectcmd);
@@ -298,6 +303,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
     listRewind(slaves,&li);
     while((ln = listNext(&li))) {
         client *slave = ln->value;
+        NOT_IMPLEMENTED;
 
         if (!canFeedReplicaReplBuffer(slave)) continue;
 
@@ -353,6 +359,7 @@ void showLatestBacklog(void) {
  * to our sub-slaves. */
 #include <ctype.h>
 void replicationFeedSlavesFromMasterStream(list *slaves, char *buf, size_t buflen) {
+    NOT_IMPLEMENTED;
     listNode *ln;
     listIter li;
 
@@ -370,6 +377,7 @@ void replicationFeedSlavesFromMasterStream(list *slaves, char *buf, size_t bufle
     listRewind(slaves,&li);
     while((ln = listNext(&li))) {
         client *slave = ln->value;
+        NOT_IMPLEMENTED;
 
         if (!canFeedReplicaReplBuffer(slave)) continue;
         addReplyProto(slave,buf,buflen);
@@ -377,6 +385,7 @@ void replicationFeedSlavesFromMasterStream(list *slaves, char *buf, size_t bufle
 }
 
 void replicationFeedMonitors(client *c, list *monitors, int dictid, robj **argv, int argc) {
+    NOT_IMPLEMENTED;
     listNode *ln;
     listIter li;
     int j;
@@ -410,6 +419,7 @@ void replicationFeedMonitors(client *c, list *monitors, int dictid, robj **argv,
     listRewind(monitors,&li);
     while((ln = listNext(&li))) {
         client *monitor = ln->value;
+        NOT_IMPLEMENTED;
         addReply(monitor,cmdobj);
     }
     decrRefCount(cmdobj);
@@ -418,6 +428,7 @@ void replicationFeedMonitors(client *c, list *monitors, int dictid, robj **argv,
 /* Feed the slave 'c' with the replication backlog starting from the
  * specified 'offset' up to the end of the backlog. */
 long long addReplyReplicationBacklog(client *c, long long offset) {
+    NOT_IMPLEMENTED;
     long long j, skip, len;
 
     serverLog(LL_DEBUG, "[PSYNC] Replica request offset: %lld", offset);
@@ -492,6 +503,7 @@ long long getPsyncInitialOffset(void) {
  * BGSAVE for replication was started, or when there is one already in
  * progress that we attached our slave to. */
 int replicationSetupSlaveForFullResync(client *slave, long long offset) {
+    NOT_IMPLEMENTED;
     char buf[128];
     int buflen;
 
@@ -521,6 +533,7 @@ int replicationSetupSlaveForFullResync(client *slave, long long offset) {
  * On success return C_OK, otherwise C_ERR is returned and we proceed
  * with the usual full resync. */
 int masterTryPartialResynchronization(client *c) {
+    NOT_IMPLEMENTED;
     long long psync_offset, psync_len;
     char *master_replid = c->argv[1]->ptr;
     char buf[128];
@@ -679,8 +692,10 @@ int startBgsaveForReplication(int mincapa) {
     if (retval == C_ERR) {
         serverLog(LL_WARNING,"BGSAVE for replication failed");
         listRewind(server.slaves,&li);
+        NOT_IMPLEMENTED;
         while((ln = listNext(&li))) {
             client *slave = ln->value;
+            NOT_IMPLEMENTED;
 
             if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
                 slave->replstate = REPL_STATE_NONE;
@@ -698,8 +713,10 @@ int startBgsaveForReplication(int mincapa) {
      * the slaves for a full resync. Otherwise for disk target do it now.*/
     if (!socket_target) {
         listRewind(server.slaves,&li);
+        NOT_IMPLEMENTED;
         while((ln = listNext(&li))) {
             client *slave = ln->value;
+            NOT_IMPLEMENTED;
 
             if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
                     replicationSetupSlaveForFullResync(slave,
@@ -830,10 +847,12 @@ void syncCommand(client *c) {
          * one for replication, i.e. if there is another slave that is
          * registering differences since the server forked to save. */
         client *slave;
+        NOT_IMPLEMENTED;
         listNode *ln;
         listIter li;
 
         listRewind(server.slaves,&li);
+        NOT_IMPLEMENTED;
         while((ln = listNext(&li))) {
             slave = ln->value;
             /* If the client needs a buffer of commands, we can't use
@@ -1047,11 +1066,13 @@ void removeRDBUsedToSyncReplicas(void) {
 
     if (allPersistenceDisabled() && RDBGeneratedByReplication) {
         client *slave;
+        NOT_IMPLEMENTED;
         listNode *ln;
         listIter li;
 
         int delrdb = 1;
         listRewind(server.slaves,&li);
+        NOT_IMPLEMENTED;
         while((ln = listNext(&li))) {
             slave = ln->value;
             if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START ||
@@ -1077,6 +1098,7 @@ void removeRDBUsedToSyncReplicas(void) {
 
 void sendBulkToSlave(connection *conn) {
     client *slave = connGetPrivateData(conn);
+    NOT_IMPLEMENTED;
     char buf[PROTO_IOBUF_LEN];
     ssize_t nwritten, buflen;
 
@@ -1150,6 +1172,7 @@ void rdbPipeWriteHandlerConnRemoved(struct connection *conn) {
 void rdbPipeWriteHandler(struct connection *conn) {
     serverAssert(server.rdb_pipe_bufflen>0);
     client *slave = connGetPrivateData(conn);
+    NOT_IMPLEMENTED;
     int nwritten;
     if ((nwritten = connWrite(conn, server.rdb_pipe_buff + slave->repldboff,
                               server.rdb_pipe_bufflen - slave->repldboff)) == -1)
@@ -1190,6 +1213,7 @@ void rdbPipeReadHandler(struct aeEventLoop *eventLoop, int fd, void *clientData,
                 if (!conn)
                     continue;
                 client *slave = connGetPrivateData(conn);
+                NOT_IMPLEMENTED;
                 freeClient(slave);
                 server.rdb_pipe_conns[i] = NULL;
             }
@@ -1226,6 +1250,7 @@ void rdbPipeReadHandler(struct aeEventLoop *eventLoop, int fd, void *clientData,
                 continue;
 
             client *slave = connGetPrivateData(conn);
+            NOT_IMPLEMENTED;
             if ((nwritten = connWrite(conn, server.rdb_pipe_buff, server.rdb_pipe_bufflen)) == -1) {
                 if (connGetState(conn) != CONN_STATE_CONNECTED) {
                     serverLog(LL_WARNING,"Diskless rdb transfer, write error sending DB to replica: %s",
@@ -1284,6 +1309,7 @@ void updateSlavesWaitingBgsave(int bgsaveerr, int type) {
     listRewind(server.slaves,&li);
     while((ln = listNext(&li))) {
         client *slave = ln->value;
+        acquireClient(slave);
 
         if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_END) {
             struct redis_stat buf;
@@ -1291,6 +1317,7 @@ void updateSlavesWaitingBgsave(int bgsaveerr, int type) {
             if (bgsaveerr != C_OK) {
                 freeClient(slave);
                 serverLog(LL_WARNING,"SYNC failed. BGSAVE child returned an error");
+                releaseClient(slave);
                 continue;
             }
 
@@ -1336,6 +1363,7 @@ void updateSlavesWaitingBgsave(int bgsaveerr, int type) {
                     redis_fstat(slave->repldbfd,&buf) == -1) {
                     freeClient(slave);
                     serverLog(LL_WARNING,"SYNC failed. Can't open/stat DB after BGSAVE: %s", strerror(errno));
+                    releaseClient(slave);
                     continue;
                 }
                 slave->repldboff = 0;
@@ -1347,10 +1375,12 @@ void updateSlavesWaitingBgsave(int bgsaveerr, int type) {
                 connSetWriteHandler(slave->conn,NULL);
                 if (connSetWriteHandler(slave->conn,sendBulkToSlave) == C_ERR) {
                     freeClient(slave);
+                    releaseClient(slave);
                     continue;
                 }
             }
         }
+        releaseClient(slave);
     }
 }
 
@@ -2794,8 +2824,10 @@ void roleCommand(client *c) {
         addReplyLongLong(c,server.master_repl_offset);
         mbcount = addReplyDeferredLen(c);
         listRewind(server.slaves,&li);
+        NOT_IMPLEMENTED;
         while((ln = listNext(&li))) {
             client *slave = ln->value;
+            NOT_IMPLEMENTED;
             char ip[NET_IP_STR_LEN], *slaveaddr = slave->slave_addr;
 
             if (!slaveaddr) {
@@ -2840,6 +2872,7 @@ void roleCommand(client *c) {
  * no effects. */
 void replicationSendAck(void) {
     client *c = server.master;
+    NOT_IMPLEMENTED;
 
     if (c != NULL) {
         c->flags |= CLIENT_MASTER_FORCE_REPLY;
@@ -3011,8 +3044,10 @@ void refreshGoodSlavesCount(void) {
         !server.repl_min_slaves_max_lag) return;
 
     listRewind(server.slaves,&li);
+    NOT_IMPLEMENTED;
     while((ln = listNext(&li))) {
         client *slave = ln->value;
+        NOT_IMPLEMENTED;
         time_t lag = server.unixtime - slave->repl_ack_time;
 
         if (slave->replstate == SLAVE_STATE_ONLINE &&
@@ -3147,8 +3182,10 @@ int replicationCountAcksByOffset(long long offset) {
     int count = 0;
 
     listRewind(server.slaves,&li);
+    NOT_IMPLEMENTED;
     while((ln = listNext(&li))) {
         client *slave = ln->value;
+        NOT_IMPLEMENTED;
 
         if (slave->replstate != SLAVE_STATE_ONLINE) continue;
         if (slave->repl_ack_off >= offset) count++;
@@ -3214,8 +3251,10 @@ void processClientsWaitingReplicas(void) {
     listNode *ln;
 
     listRewind(server.clients_waiting_acks,&li);
+    NOT_IMPLEMENTED;
     while((ln = listNext(&li))) {
         client *c = ln->value;
+        NOT_IMPLEMENTED;
 
         /* Every time we find a client that is satisfied for a given
          * offset and number of replicas, we remember it so the next client
@@ -3355,6 +3394,7 @@ void replicationCron(void) {
     listRewind(server.slaves,&li);
     while((ln = listNext(&li))) {
         client *slave = ln->value;
+        acquireClient(slave);
 
         int is_presync =
             (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START ||
@@ -3364,6 +3404,7 @@ void replicationCron(void) {
         if (is_presync) {
             connWrite(slave->conn, "\n", 1);
         }
+        releaseClient(slave);
     }
 
     /* Disconnect timedout slaves. */
@@ -3374,15 +3415,23 @@ void replicationCron(void) {
         listRewind(server.slaves,&li);
         while((ln = listNext(&li))) {
             client *slave = ln->value;
+            acquireClient(slave);
 
-            if (slave->replstate != SLAVE_STATE_ONLINE) continue;
-            if (slave->flags & CLIENT_PRE_PSYNC) continue;
+            if (slave->replstate != SLAVE_STATE_ONLINE) {
+                releaseClient(slave);
+                continue;
+            }
+            if (slave->flags & CLIENT_PRE_PSYNC) {
+                releaseClient(slave);
+                continue;
+            }
             if ((server.unixtime - slave->repl_ack_time) > server.repl_timeout)
             {
                 serverLog(LL_WARNING, "Disconnecting timedout replica: %s",
                     replicationGetSlaveName(slave));
                 freeClient(slave);
             }
+            releaseClient(slave);
         }
     }
 
@@ -3461,6 +3510,7 @@ void replicationStartPendingFork(void) {
         listRewind(server.slaves,&li);
         while((ln = listNext(&li))) {
             client *slave = ln->value;
+            acquireClient(slave);
             if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
                 idle = server.unixtime - slave->lastinteraction;
                 if (idle > max_idle) max_idle = idle;
@@ -3468,6 +3518,7 @@ void replicationStartPendingFork(void) {
                 mincapa = (mincapa == -1) ? slave->slave_capa :
                                             (mincapa & slave->slave_capa);
             }
+            releaseClient(slave);
         }
 
         if (slaves_waiting &&
@@ -3487,8 +3538,10 @@ static client *findReplica(char *host, int port) {
     listIter li;
     listNode *ln;
     client *replica;
+    NOT_IMPLEMENTED;
 
     listRewind(server.slaves,&li);
+    NOT_IMPLEMENTED;
     while((ln = listNext(&li))) {
         replica = ln->value;
         char ip[NET_IP_STR_LEN], *replicaip = replica->slave_addr;
@@ -3647,6 +3700,7 @@ void failoverCommand(client *c) {
     /* If a replica address was provided, validate that it is connected. */
     if (host) {
         client *replica = findReplica(host, port);
+        NOT_IMPLEMENTED;
 
         if (replica == NULL) {
             addReplyError(c,"FAILOVER target HOST and IP is not "
@@ -3710,6 +3764,7 @@ void updateFailoverStatus(void) {
 
     /* Check to see if the replica has caught up so failover can start */
     client *replica = NULL;
+    NOT_IMPLEMENTED;
     if (server.target_replica_host) {
         replica = findReplica(server.target_replica_host, 
             server.target_replica_port);
@@ -3718,6 +3773,7 @@ void updateFailoverStatus(void) {
         listNode *ln;
 
         listRewind(server.slaves,&li);
+        NOT_IMPLEMENTED;
         /* Find any replica that has matched our repl_offset */
         while((ln = listNext(&li))) {
             replica = ln->value;

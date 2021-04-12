@@ -28,6 +28,7 @@
  */
 
 #include "server.h"
+#include "my-defs.h"
 
 int clientSubscriptionsCount(client *c);
 
@@ -302,6 +303,7 @@ int pubsubPublishMessage(robj *channel, robj *message) {
         listRewind(list,&li);
         while ((ln = listNext(&li)) != NULL) {
             client *c = ln->value;
+            NOT_IMPLEMENTED;
             addReplyPubsubMessage(c,channel,message);
             receivers++;
         }
@@ -321,6 +323,7 @@ int pubsubPublishMessage(robj *channel, robj *message) {
             listRewind(clients,&li);
             while ((ln = listNext(&li)) != NULL) {
                 client *c = listNodeValue(ln);
+                NOT_IMPLEMENTED;
                 addReplyPubsubPatMessage(c,pattern,channel,message);
                 receivers++;
             }

@@ -35,6 +35,7 @@
 #include "latency.h"
 #include "atomicvar.h"
 #include "mt19937-64.h"
+#include "my-defs.h"
 
 #include <time.h>
 #include <signal.h>
@@ -1838,13 +1839,27 @@ void clientsCron(void) {
         listRotateTailToHead(server.clients);
         head = listFirst(server.clients);
         c = listNodeValue(head);
+        acquireClient(c);
         /* The following functions do different service checks on the client.
          * The protocol is that they return non-zero if the client was
          * terminated. */
-        if (clientsCronHandleTimeout(c,now)) continue;
-        if (clientsCronResizeQueryBuffer(c)) continue;
-        if (clientsCronTrackExpansiveClients(c)) continue;
-        if (clientsCronTrackClientsMemUsage(c)) continue;
+        if (clientsCronHandleTimeout(c,now)) {
+            releaseClient(c);
+            continue;
+        }
+        if (clientsCronResizeQueryBuffer(c)) {
+            releaseClient(c);
+            continue;
+        }
+        if (clientsCronTrackExpansiveClients(c)) {
+            releaseClient(c);
+            continue;
+        }
+        if (clientsCronTrackClientsMemUsage(c)) {
+            releaseClient(c);
+            continue;
+        }
+        releaseClient(c);
     }
 }
 
@@ -3847,11 +3862,13 @@ void call(client *c, int flags) {
     if (c->cmd->flags & CMD_READONLY) {
         client *caller = (c->flags & CLIENT_LUA && server.lua_caller) ?
                             server.lua_caller : c;
+        acquireClient(caller);
         if (caller->flags & CLIENT_TRACKING &&
             !(caller->flags & CLIENT_TRACKING_BCAST))
         {
             trackingRememberKeys(caller);
         }
+        releaseClient(caller);
     }
 
     server.fixed_time_expire--;
@@ -5082,8 +5099,10 @@ sds genRedisInfoString(const char *section) {
             listIter li;
 
             listRewind(server.slaves,&li);
+            NOT_IMPLEMENTED;
             while((ln = listNext(&li))) {
                 client *slave = listNodeValue(ln);
+                NOT_IMPLEMENTED;
                 char *state = NULL;
                 char ip[NET_IP_STR_LEN], *slaveip = slave->slave_addr;
                 int port;

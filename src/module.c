@@ -32,6 +32,7 @@
 #include "slowlog.h"
 #include "rdb.h"
 #include "monotonic.h"
+#include "my-defs.h"
 #include <dlfcn.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -596,6 +597,7 @@ int RM_GetApi(const char *funcname, void **targetPtrPtr) {
  * details needed to correctly replicate commands. */
 void moduleHandlePropagationAfterCommandCallback(RedisModuleCtx *ctx) {
     client *c = ctx->client;
+    NOT_IMPLEMENTED;
 
     /* We don't need to do anything here if the context was never used
      * in order to propagate commands. */
@@ -659,6 +661,7 @@ void RedisModuleCommandDispatcher(client *c) {
     ctx.flags |= REDISMODULE_CTX_MODULE_COMMAND_CALL;
     ctx.module = cp->module;
     ctx.client = c;
+    NOT_IMPLEMENTED;
     cp->func(&ctx,(void**)c->argv,c->argc);
     moduleFreeContext(&ctx);
 
@@ -694,6 +697,7 @@ int moduleGetCommandKeysViaAPI(struct redisCommand *cmd, robj **argv, int argc, 
 
     ctx.module = cp->module;
     ctx.client = NULL;
+    NOT_IMPLEMENTED;
     ctx.flags |= REDISMODULE_CTX_KEYS_POS_REQUEST;
 
     /* Initialize getKeysResult */
@@ -1430,6 +1434,7 @@ int RM_WrongArity(RedisModuleCtx *ctx) {
  * client object. Other contexts without associated clients are the ones
  * initialized to run the timers callbacks. */
 client *moduleGetReplyClient(RedisModuleCtx *ctx) {
+    NOT_IMPLEMENTED;
     if (ctx->flags & REDISMODULE_CTX_THREAD_SAFE) {
         if (ctx->blocked_client)
             return ctx->blocked_client->reply_client;
@@ -1448,6 +1453,7 @@ client *moduleGetReplyClient(RedisModuleCtx *ctx) {
  * The function always returns REDISMODULE_OK. */
 int RM_ReplyWithLongLong(RedisModuleCtx *ctx, long long ll) {
     client *c = moduleGetReplyClient(ctx);
+    NOT_IMPLEMENTED;
     if (c == NULL) return REDISMODULE_OK;
     addReplyLongLong(c,ll);
     return REDISMODULE_OK;
@@ -1469,6 +1475,7 @@ int RM_ReplyWithLongLong(RedisModuleCtx *ctx, long long ll) {
  */
 int RM_ReplyWithError(RedisModuleCtx *ctx, const char *err) {
     client *c = moduleGetReplyClient(ctx);
+    NOT_IMPLEMENTED;
     if (c == NULL) return REDISMODULE_OK;
     addReplyErrorFormat(c,"-%s",err);
     return REDISMODULE_OK;
@@ -1481,6 +1488,7 @@ int RM_ReplyWithError(RedisModuleCtx *ctx, const char *err) {
  * The function always returns REDISMODULE_OK. */
 int RM_ReplyWithSimpleString(RedisModuleCtx *ctx, const char *msg) {
     client *c = moduleGetReplyClient(ctx);
+    NOT_IMPLEMENTED;
     if (c == NULL) return REDISMODULE_OK;
     addReplyProto(c,"+",1);
     addReplyProto(c,msg,strlen(msg));
@@ -1501,6 +1509,7 @@ int RM_ReplyWithSimpleString(RedisModuleCtx *ctx, const char *msg) {
  * The function always returns REDISMODULE_OK. */
 int RM_ReplyWithArray(RedisModuleCtx *ctx, long len) {
     client *c = moduleGetReplyClient(ctx);
+    NOT_IMPLEMENTED;
     if (c == NULL) return REDISMODULE_OK;
     if (len == REDISMODULE_POSTPONED_ARRAY_LEN) {
         ctx->postponed_arrays = zrealloc(ctx->postponed_arrays,sizeof(void*)*
@@ -1520,6 +1529,7 @@ int RM_ReplyWithArray(RedisModuleCtx *ctx, long len) {
  * The function always returns REDISMODULE_OK. */
 int RM_ReplyWithNullArray(RedisModuleCtx *ctx) {
     client *c = moduleGetReplyClient(ctx);
+    NOT_IMPLEMENTED;
     if (c == NULL) return REDISMODULE_OK;
     addReplyNullArray(c);
     return REDISMODULE_OK;
@@ -1530,6 +1540,7 @@ int RM_ReplyWithNullArray(RedisModuleCtx *ctx) {
  * The function always returns REDISMODULE_OK. */
 int RM_ReplyWithEmptyArray(RedisModuleCtx *ctx) {
     client *c = moduleGetReplyClient(ctx);
+    NOT_IMPLEMENTED;
     if (c == NULL) return REDISMODULE_OK;
     addReply(c,shared.emptyarray);
     return REDISMODULE_OK;
@@ -1563,6 +1574,7 @@ int RM_ReplyWithEmptyArray(RedisModuleCtx *ctx) {
  */
 void RM_ReplySetArrayLength(RedisModuleCtx *ctx, long len) {
     client *c = moduleGetReplyClient(ctx);
+    NOT_IMPLEMENTED;
     if (c == NULL) return;
     if (ctx->postponed_arrays_count == 0) {
         serverLog(LL_WARNING,
@@ -1587,6 +1599,7 @@ void RM_ReplySetArrayLength(RedisModuleCtx *ctx, long len) {
  * The function always returns REDISMODULE_OK. */
 int RM_ReplyWithStringBuffer(RedisModuleCtx *ctx, const char *buf, size_t len) {
     client *c = moduleGetReplyClient(ctx);
+    NOT_IMPLEMENTED;
     if (c == NULL) return REDISMODULE_OK;
     addReplyBulkCBuffer(c,(char*)buf,len);
     return REDISMODULE_OK;
@@ -1598,6 +1611,7 @@ int RM_ReplyWithStringBuffer(RedisModuleCtx *ctx, const char *buf, size_t len) {
  * The function always returns REDISMODULE_OK. */
 int RM_ReplyWithCString(RedisModuleCtx *ctx, const char *buf) {
     client *c = moduleGetReplyClient(ctx);
+    NOT_IMPLEMENTED;
     if (c == NULL) return REDISMODULE_OK;
     addReplyBulkCString(c,(char*)buf);
     return REDISMODULE_OK;
@@ -1608,6 +1622,7 @@ int RM_ReplyWithCString(RedisModuleCtx *ctx, const char *buf) {
  * The function always returns REDISMODULE_OK. */
 int RM_ReplyWithString(RedisModuleCtx *ctx, RedisModuleString *str) {
     client *c = moduleGetReplyClient(ctx);
+    NOT_IMPLEMENTED;
     if (c == NULL) return REDISMODULE_OK;
     addReplyBulk(c,str);
     return REDISMODULE_OK;
@@ -1618,6 +1633,7 @@ int RM_ReplyWithString(RedisModuleCtx *ctx, RedisModuleString *str) {
  * The function always returns REDISMODULE_OK. */
 int RM_ReplyWithEmptyString(RedisModuleCtx *ctx) {
     client *c = moduleGetReplyClient(ctx);
+    NOT_IMPLEMENTED;
     if (c == NULL) return REDISMODULE_OK;
     addReply(c,shared.emptybulk);
     return REDISMODULE_OK;
@@ -1629,6 +1645,7 @@ int RM_ReplyWithEmptyString(RedisModuleCtx *ctx) {
  * The function always returns REDISMODULE_OK. */
 int RM_ReplyWithVerbatimString(RedisModuleCtx *ctx, const char *buf, size_t len) {
     client *c = moduleGetReplyClient(ctx);
+    NOT_IMPLEMENTED;
     if (c == NULL) return REDISMODULE_OK;
     addReplyVerbatim(c, buf, len, "txt");
     return REDISMODULE_OK;
@@ -1639,6 +1656,7 @@ int RM_ReplyWithVerbatimString(RedisModuleCtx *ctx, const char *buf, size_t len)
  * The function always returns REDISMODULE_OK. */
 int RM_ReplyWithNull(RedisModuleCtx *ctx) {
     client *c = moduleGetReplyClient(ctx);
+    NOT_IMPLEMENTED;
     if (c == NULL) return REDISMODULE_OK;
     addReplyNull(c);
     return REDISMODULE_OK;
@@ -1652,6 +1670,7 @@ int RM_ReplyWithNull(RedisModuleCtx *ctx) {
  * The function always returns REDISMODULE_OK. */
 int RM_ReplyWithCallReply(RedisModuleCtx *ctx, RedisModuleCallReply *reply) {
     client *c = moduleGetReplyClient(ctx);
+    NOT_IMPLEMENTED;
     if (c == NULL) return REDISMODULE_OK;
     sds proto = sdsnewlen(reply->proto, reply->protolen);
     addReplySds(c,proto);
@@ -1666,6 +1685,7 @@ int RM_ReplyWithCallReply(RedisModuleCtx *ctx, RedisModuleCallReply *reply) {
  * The function always returns REDISMODULE_OK. */
 int RM_ReplyWithDouble(RedisModuleCtx *ctx, double d) {
     client *c = moduleGetReplyClient(ctx);
+    NOT_IMPLEMENTED;
     if (c == NULL) return REDISMODULE_OK;
     addReplyDouble(c,d);
     return REDISMODULE_OK;
@@ -1681,6 +1701,7 @@ int RM_ReplyWithDouble(RedisModuleCtx *ctx, double d) {
  * The function always returns REDISMODULE_OK. */
 int RM_ReplyWithLongDouble(RedisModuleCtx *ctx, long double ld) {
     client *c = moduleGetReplyClient(ctx);
+    NOT_IMPLEMENTED;
     if (c == NULL) return REDISMODULE_OK;
     addReplyHumanLongDouble(c, ld);
     return REDISMODULE_OK;
@@ -1843,6 +1864,7 @@ unsigned long long RM_GetClientId(RedisModuleCtx *ctx) {
  * using an ACL user, NULL is returned and errno is set to ENOTSUP */
 RedisModuleString *RM_GetClientUserNameById(RedisModuleCtx *ctx, uint64_t id) {
     client *client = lookupClientByID(id);
+    NOT_IMPLEMENTED;
     if (client == NULL) {
         errno = ENOENT;
         return NULL;
@@ -1957,6 +1979,7 @@ int modulePopulateReplicationInfoStructure(void *ri, int structver) {
  */
 int RM_GetClientInfoById(void *ci, uint64_t id) {
     client *client = lookupClientByID(id);
+    NOT_IMPLEMENTED;
     if (client == NULL) return REDISMODULE_ERR;
     if (ci == NULL) return REDISMODULE_OK;
 
@@ -2059,6 +2082,7 @@ int RM_GetContextFlags(RedisModuleCtx *ctx) {
 
         /* For DIRTY flags, we need the blocked client if used */
         client *c = ctx->blocked_client ? ctx->blocked_client->client : ctx->client;
+        NOT_IMPLEMENTED;
         if (c && (c->flags & (CLIENT_DIRTY_CAS|CLIENT_DIRTY_EXEC))) {
             flags |= REDISMODULE_CTX_FLAGS_MULTI_DIRTY;
         }
@@ -3985,6 +4009,7 @@ fmterr:
 RedisModuleCallReply *RM_Call(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...) {
     struct redisCommand *cmd;
     client *c = NULL;
+    NOT_IMPLEMENTED;
     robj **argv = NULL;
     int argc = 0, flags = 0;
     va_list ap;
@@ -4009,6 +4034,7 @@ RedisModuleCallReply *RM_Call(RedisModuleCtx *ctx, const char *cmdname, const ch
          * recursive call to this module.) */
         c = createClient(NULL);
     }
+    NOT_IMPLEMENTED;
     c->user = NULL; /* Root user. */
     c->flags = CLIENT_MODULE;
 
@@ -5117,6 +5143,7 @@ void unblockClientFromModule(client *c) {
         ctx.blocked_privdata = bc->privdata;
         ctx.module = bc->module;
         ctx.client = bc->client;
+        NOT_IMPLEMENTED;
         bc->disconnect_callback(&ctx,bc);
         moduleFreeContext(&ctx);
     }
@@ -5168,7 +5195,9 @@ void unblockClientFromModule(client *c) {
  *
  */
 RedisModuleBlockedClient *moduleBlockClient(RedisModuleCtx *ctx, RedisModuleCmdFunc reply_callback, RedisModuleCmdFunc timeout_callback, void (*free_privdata)(RedisModuleCtx*,void*), long long timeout_ms, RedisModuleString **keys, int numkeys, void *privdata) {
+    NOT_IMPLEMENTED;
     client *c = ctx->client;
+    NOT_IMPLEMENTED;
     int islua = server.in_eval;
     int ismulti = server.in_exec;
 
@@ -5234,6 +5263,7 @@ int moduleTryServeClientBlockedOnKey(client *c, robj *key) {
     ctx.blocked_privdata = bc->privdata;
     ctx.module = bc->module;
     ctx.client = bc->client;
+    NOT_IMPLEMENTED;
     ctx.blocked_client = bc;
     if (bc->reply_callback(&ctx,(void**)c->argv,c->argc) == REDISMODULE_OK)
         served = 1;
@@ -5444,6 +5474,7 @@ void RM_SetDisconnectCallback(RedisModuleBlockedClient *bc, RedisModuleDisconnec
  * When this happens the RedisModuleBlockedClient structure in the queue
  * will have the 'client' field set to NULL. */
 void moduleHandleBlockedClients(void) {
+    NOT_IMPLEMENTED;
     listNode *ln;
     RedisModuleBlockedClient *bc;
 
@@ -5456,6 +5487,7 @@ void moduleHandleBlockedClients(void) {
         ln = listFirst(moduleUnblockedClients);
         bc = ln->value;
         client *c = bc->client;
+        NOT_IMPLEMENTED;
         listDelNode(moduleUnblockedClients,ln);
         pthread_mutex_unlock(&moduleUnblockedClientsMutex);
 
@@ -5475,6 +5507,7 @@ void moduleHandleBlockedClients(void) {
             ctx.blocked_ready_key = NULL;
             ctx.module = bc->module;
             ctx.client = bc->client;
+            NOT_IMPLEMENTED;
             ctx.blocked_client = bc;
             monotime replyTimer;
             elapsedStart(&replyTimer);
@@ -5498,6 +5531,7 @@ void moduleHandleBlockedClients(void) {
             ctx.blocked_privdata = bc->privdata;
             ctx.module = bc->module;
             ctx.client = bc->client;
+            NOT_IMPLEMENTED;
             bc->free_privdata(&ctx,bc->privdata);
             moduleFreeContext(&ctx);
         }
@@ -5548,6 +5582,7 @@ void moduleBlockedClientTimedOut(client *c) {
     ctx.flags |= REDISMODULE_CTX_BLOCKED_TIMEOUT;
     ctx.module = bc->module;
     ctx.client = bc->client;
+    NOT_IMPLEMENTED;
     ctx.blocked_client = bc;
     ctx.blocked_privdata = bc->privdata;
     bc->timeout_callback(&ctx,(void**)c->argv,c->argc);
@@ -5815,6 +5850,7 @@ void moduleNotifyKeyspaceEvent(int type, const char *event, robj *key, int dbid)
             RedisModuleCtx ctx = REDISMODULE_CTX_INIT;
             ctx.module = sub->module;
             ctx.client = moduleFreeContextReusedClient;
+            NOT_IMPLEMENTED;
             selectDb(ctx.client, dbid);
 
             /* mark the handler as active to avoid reentrant loops.
@@ -5878,6 +5914,7 @@ void moduleCallClusterReceivers(const char *sender_id, uint64_t module_id, uint8
             RedisModuleCtx ctx = REDISMODULE_CTX_INIT;
             ctx.module = r->module;
             ctx.client = moduleFreeContextReusedClient;
+            NOT_IMPLEMENTED;
             selectDb(ctx.client, 0);
             r->callback(&ctx,sender_id,type,payload,len);
             moduleFreeContext(&ctx);
@@ -6153,6 +6190,7 @@ int moduleTimerHandler(struct aeEventLoop *eventLoop, long long id, void *client
 
             ctx.module = timer->module;
             ctx.client = moduleFreeContextReusedClient;
+            NOT_IMPLEMENTED;
             selectDb(ctx.client, timer->dbid);
             timer->callback(&ctx,timer->data);
             moduleFreeContext(&ctx);
@@ -6322,8 +6360,10 @@ static void moduleFreeAuthenticatedClients(RedisModule *module) {
     listIter li;
     listNode *ln;
     listRewind(server.clients,&li);
+    NOT_IMPLEMENTED;
     while ((ln = listNext(&li)) != NULL) {
         client *c = listNodeValue(ln);
+        NOT_IMPLEMENTED;
         if (!c->auth_module) continue;
 
         RedisModule *auth_module = (RedisModule *) c->auth_module;
@@ -6469,6 +6509,7 @@ int RM_AuthenticateClientWithACLUser(RedisModuleCtx *ctx, const char *name, size
 int RM_DeauthenticateAndCloseClient(RedisModuleCtx *ctx, uint64_t client_id) {
     UNUSED(ctx);
     client *c = lookupClientByID(client_id);
+    NOT_IMPLEMENTED;
     if (c == NULL) return REDISMODULE_ERR;
 
     /* Revoke also marks client to be closed ASAP */
@@ -6490,6 +6531,7 @@ int RM_DeauthenticateAndCloseClient(RedisModuleCtx *ctx, uint64_t client_id) {
  */
 RedisModuleString *RM_GetClientCertificate(RedisModuleCtx *ctx, uint64_t client_id) {
     client *c = lookupClientByID(client_id);
+    NOT_IMPLEMENTED;
     if (c == NULL) return NULL;
 
     sds cert = connTLSGetPeerCert(c->conn);
@@ -8153,6 +8195,7 @@ void moduleFireServerEvent(uint64_t eid, int subid, void *data) {
                 ctx.client->flags |= CLIENT_MODULE;
                 ctx.client->user = NULL; /* Root user. */
             }
+            NOT_IMPLEMENTED;
 
             void *moduledata = NULL;
             RedisModuleClientInfoV1 civ1;
@@ -8297,8 +8340,10 @@ void moduleRegisterCoreAPI(void);
  * been initialized, see #7323. */
 void moduleInitModulesSystemLast(void) {
     moduleFreeContextReusedClient = createClient(NULL);
+    acquireClient(moduleFreeContextReusedClient);
     moduleFreeContextReusedClient->flags |= CLIENT_MODULE;
     moduleFreeContextReusedClient->user = NULL; /* root user. */
+    releaseClient(moduleFreeContextReusedClient);
 }
 
 void moduleInitModulesSystem(void) {
@@ -8408,6 +8453,7 @@ int moduleLoad(const char *path, void **module_argv, int module_argc) {
     void *handle;
     RedisModuleCtx ctx = REDISMODULE_CTX_INIT;
     ctx.client = moduleFreeContextReusedClient;
+    NOT_IMPLEMENTED;
     selectDb(ctx.client, 0);
 
     struct stat st;
@@ -8467,6 +8513,7 @@ int moduleLoad(const char *path, void **module_argv, int module_argc) {
  * * ENONET: No such module having the specified name.
  * * EBUSY: The module exports a new data type and can only be reloaded. */
 int moduleUnload(sds name) {
+    NOT_IMPLEMENTED;
     struct RedisModule *module = dictFetchValue(modules,name);
 
     if (module == NULL) {
@@ -8490,6 +8537,7 @@ int moduleUnload(sds name) {
         RedisModuleCtx ctx = REDISMODULE_CTX_INIT;
         ctx.module = module;
         ctx.client = moduleFreeContextReusedClient;
+        NOT_IMPLEMENTED;
         int unload_status = onunload((void*)&ctx);
         moduleFreeContext(&ctx);
 

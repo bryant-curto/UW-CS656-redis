@@ -28,6 +28,7 @@
  */
 
 #include "server.h"
+#include "my-defs.h"
 
 /* ================================ MULTI/EXEC ============================== */
 
@@ -369,6 +370,7 @@ void touchWatchedKey(redisDb *db, robj *key) {
     listRewind(clients,&li);
     while((ln = listNext(&li))) {
         client *c = listNodeValue(ln);
+        NOT_IMPLEMENTED;
 
         c->flags |= CLIENT_DIRTY_CAS;
     }
@@ -396,6 +398,7 @@ void touchAllWatchedKeysInDb(redisDb *emptied, redisDb *replaced_with) {
         listRewind(clients,&li);
         while((ln = listNext(&li))) {
             client *c = listNodeValue(ln);
+            NOT_IMPLEMENTED;
             if (dictFind(emptied->dict, key->ptr)) {
                 c->flags |= CLIENT_DIRTY_CAS;
             } else if (replaced_with && dictFind(replaced_with->dict, key->ptr)) {

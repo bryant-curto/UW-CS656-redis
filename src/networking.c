@@ -30,10 +30,12 @@
 #include "server.h"
 #include "atomicvar.h"
 #include "cluster.h"
+#include "my-defs.h"
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <math.h>
 #include <ctype.h>
+#include <assert.h>
 
 static void setProtocolError(const char *errstr, client *c);
 int postponeClientRead(client *c);
@@ -186,6 +188,10 @@ client *createClient(connection *conn) {
     c->auth_callback = NULL;
     c->auth_callback_privdata = NULL;
     c->auth_module = NULL;
+    assert(0 == pthread_spin_init(&c->mutex, PTHREAD_PROCESS_PRIVATE));
+    c->is_deleted = 0;
+    c->lock_depth = 0;
+
     listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
     if (conn) linkClient(c);
@@ -952,12 +958,14 @@ int clientHasPendingReplies(client *c) {
 
 void clientAcceptHandler(connection *conn) {
     client *c = connGetPrivateData(conn);
+    acquireClient(c);
 
     if (connGetState(conn) != CONN_STATE_CONNECTED) {
         serverLog(LL_WARNING,
                 "Error accepting a client connection: %s",
                 connGetLastError(conn));
         freeClientAsync(c);
+        releaseClient(c);
         return;
     }
 
@@ -1000,6 +1008,7 @@ void clientAcceptHandler(connection *conn) {
             }
             server.stat_rejected_conn++;
             freeClientAsync(c);
+            releaseClient(c);
             return;
         }
     }
@@ -1008,6 +1017,7 @@ void clientAcceptHandler(connection *conn) {
     moduleFireServerEvent(REDISMODULE_EVENT_CLIENT_CHANGE,
                           REDISMODULE_SUBEVENT_CLIENT_CHANGE_CONNECTED,
                           c);
+    releaseClient(c);
 }
 
 #define MAX_ACCEPTS_PER_CALL 1000
@@ -1060,6 +1070,7 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip) {
         connClose(conn); /* May be already closed, just ignore errors */
         return;
     }
+    acquireClient(c);
 
     /* Last chance to keep flags */
     c->flags |= flags;
@@ -1078,9 +1089,14 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip) {
             serverLog(LL_WARNING,
                     "Error accepting a client connection: %s (conn: %s)",
                     connGetLastError(conn), connGetInfo(conn, conninfo, sizeof(conninfo)));
-        freeClient(connGetPrivateData(conn));
+        client *cc = (client *)connGetPrivateData(conn);
+        acquireClient(cc);
+        freeClient(cc);
+        releaseClient(cc);
+        releaseClient(c);
         return;
     }
+    releaseClient(c);
 }
 
 void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
@@ -1172,7 +1188,9 @@ void disconnectSlaves(void) {
     listIter li;
     listNode *ln;
     listRewind(server.slaves,&li);
+    NOT_IMPLEMENTED;
     while((ln = listNext(&li))) {
+        NOT_IMPLEMENTED;
         freeClient((client*)ln->value);
     }
 }
@@ -1185,8 +1203,10 @@ int anyOtherSlaveWaitRdb(client *except_me) {
     listNode *ln;
 
     listRewind(server.slaves, &li);
+    NOT_IMPLEMENTED;
     while((ln = listNext(&li))) {
         client *slave = ln->value;
+        NOT_IMPLEMENTED;
         if (slave != except_me &&
             slave->replstate == SLAVE_STATE_WAIT_BGSAVE_END)
         {
@@ -1266,6 +1286,7 @@ void unlinkClient(client *c) {
 }
 
 void freeClient(client *c) {
+    myprintf("Freeing client %p!\n", (void *)c);
     listNode *ln;
 
     /* If a client is protected, yet we need to free it right now, make sure
@@ -1367,6 +1388,7 @@ void freeClient(client *c) {
             if (c->replpreamble) sdsfree(c->replpreamble);
         }
         list *l = (c->flags & CLIENT_MONITOR) ? server.monitors : server.slaves;
+        NOT_IMPLEMENTED;
         ln = listSearchKey(l,c);
         serverAssert(ln != NULL);
         listDelNode(l,ln);
@@ -1401,7 +1423,15 @@ void freeClient(client *c) {
     sdsfree(c->peerid);
     sdsfree(c->sockname);
     sdsfree(c->slave_addr);
-    zfree(c);
+
+    // Mark as deleted!
+    c->is_deleted = 1;
+
+    // Keep mutex to avoid weird behavior if thread does wait on deleted client
+    // assert(0 == pthread_spin_destroy(&c->mutex));
+
+    // Have application crash if it tries to operate on a client that has been deleted
+    //zfree(c);
 }
 
 /* Schedule a client to free it at a safe time in the serverCron() function.
@@ -1409,6 +1439,7 @@ void freeClient(client *c) {
  * a context where calling freeClient() is not possible, because the client
  * should be valid for the continuation of the flow of the program. */
 void freeClientAsync(client *c) {
+    myprintf("Freeing client %p asynchronously!\n", (void *)c);
     /* We need to handle concurrent access to the server.clients_to_close list
      * only in the freeClientAsync() function, since it's the only function that
      * may access the list while Redis uses I/O threads. All the other accesses
@@ -1437,11 +1468,16 @@ int freeClientsInAsyncFreeQueue(void) {
     listRewind(server.clients_to_close,&li);
     while ((ln = listNext(&li)) != NULL) {
         client *c = listNodeValue(ln);
+        acquireClient(c);
 
-        if (c->flags & CLIENT_PROTECTED) continue;
+        if (c->flags & CLIENT_PROTECTED) {
+            releaseClient(c);
+            continue;
+        }
 
         c->flags &= ~CLIENT_CLOSE_ASAP;
         freeClient(c);
+        releaseClient(c);
         listDelNode(server.clients_to_close,ln);
         freed++;
     }
@@ -1454,6 +1490,7 @@ int freeClientsInAsyncFreeQueue(void) {
 client *lookupClientByID(uint64_t id) {
     id = htonu64(id);
     client *c = raxFind(server.clients_index,(unsigned char*)&id,sizeof(id));
+    NOT_IMPLEMENTED;
     return (c == raxNotFound) ? NULL : c;
 }
 
@@ -1567,6 +1604,7 @@ int writeToClient(client *c, int handler_installed) {
 /* Write event handler. Just send data to the client. */
 void sendReplyToClient(connection *conn) {
     client *c = connGetPrivateData(conn);
+    NOT_IMPLEMENTED;
     writeToClient(c,1);
 }
 
@@ -1582,18 +1620,28 @@ int handleClientsWithPendingWrites(void) {
     listRewind(server.clients_pending_write,&li);
     while((ln = listNext(&li))) {
         client *c = listNodeValue(ln);
+        acquireClient(c);
         c->flags &= ~CLIENT_PENDING_WRITE;
         listDelNode(server.clients_pending_write,ln);
 
         /* If a client is protected, don't do anything,
          * that may trigger write error or recreate handler. */
-        if (c->flags & CLIENT_PROTECTED) continue;
+        if (c->flags & CLIENT_PROTECTED) {
+            releaseClient(c);
+            continue;
+        }
 
         /* Don't write to clients that are going to be closed anyway. */
-        if (c->flags & CLIENT_CLOSE_ASAP) continue;
+        if (c->flags & CLIENT_CLOSE_ASAP) {
+            releaseClient(c);
+            continue;
+        }
 
         /* Try to write buffers to the client socket. */
-        if (writeToClient(c,0) == C_ERR) continue;
+        if (writeToClient(c,0) == C_ERR) {
+            releaseClient(c);
+            continue;
+        }
 
         /* If after the synchronous writes above we still have data to
          * output to the client, we need to install the writable handler. */
@@ -1613,6 +1661,7 @@ int handleClientsWithPendingWrites(void) {
                 freeClientAsync(c);
             }
         }
+        releaseClient(c);
     }
     return processed;
 }
@@ -1975,6 +2024,7 @@ void commandProcessed(client *c) {
         if (applied) {
             replicationFeedSlavesFromMasterStream(server.slaves,
                     c->pending_querybuf, applied);
+            NOT_IMPLEMENTED;
             sdsrange(c->pending_querybuf,applied,-1);
         }
     }
@@ -2103,12 +2153,16 @@ void processInputBuffer(client *c) {
 
 void readQueryFromClient(connection *conn) {
     client *c = connGetPrivateData(conn);
+    acquireClient(c);
     int nread, readlen;
     size_t qblen;
 
     /* Check if we want to read from the client later when exiting from
      * the event loop. This is the case if threaded I/O is enabled. */
-    if (postponeClientRead(c)) return;
+    if (postponeClientRead(c)) {
+        releaseClient(c);
+        return;
+    }
 
     /* Update total number of reads on server */
     atomicIncr(server.stat_total_reads_processed, 1);
@@ -2136,15 +2190,18 @@ void readQueryFromClient(connection *conn) {
     nread = connRead(c->conn, c->querybuf+qblen, readlen);
     if (nread == -1) {
         if (connGetState(conn) == CONN_STATE_CONNECTED) {
+            releaseClient(c);
             return;
         } else {
             serverLog(LL_VERBOSE, "Reading from client: %s",connGetLastError(c->conn));
             freeClientAsync(c);
+            releaseClient(c);
             return;
         }
     } else if (nread == 0) {
         serverLog(LL_VERBOSE, "Client closed connection");
         freeClientAsync(c);
+        releaseClient(c);
         return;
     } else if (c->flags & CLIENT_MASTER) {
         /* Append the query buffer to the pending (not applied) buffer
@@ -2166,22 +2223,26 @@ void readQueryFromClient(connection *conn) {
         sdsfree(ci);
         sdsfree(bytes);
         freeClientAsync(c);
+        releaseClient(c);
         return;
     }
 
     /* There is more data in the client input buffer, continue parsing it
      * in case to check if there is a full command to execute. */
      processInputBuffer(c);
+     releaseClient(c);
 }
 
 void getClientsMaxBuffers(unsigned long *longest_output_list,
                           unsigned long *biggest_input_buffer) {
     client *c;
+    NOT_IMPLEMENTED;
     listNode *ln;
     listIter li;
     unsigned long lol = 0, bib = 0;
 
     listRewind(server.clients,&li);
+    NOT_IMPLEMENTED;
     while ((ln = listNext(&li)) != NULL) {
         c = listNodeValue(ln);
 
@@ -2325,8 +2386,13 @@ sds getAllClientsInfoString(int type) {
     listRewind(server.clients,&li);
     while ((ln = listNext(&li)) != NULL) {
         client = listNodeValue(ln);
-        if (type != -1 && getClientType(client) != type) continue;
+        acquireClient(client);
+        if (type != -1 && getClientType(client) != type) {
+            releaseClient(client);
+            continue;
+        }
         o = catClientInfoString(o,client);
+        releaseClient(client);
         o = sdscatlen(o,"\n",1);
     }
     return o;
@@ -2497,6 +2563,7 @@ NULL
                     return;
                 }
                 client *cl = lookupClientByID(cid);
+                NOT_IMPLEMENTED;
                 if (cl) {
                     o = catClientInfoString(o, cl);
                     o = sdscatlen(o, "\n", 1);
@@ -2594,8 +2661,10 @@ NULL
 
         /* Iterate clients killing all the matching clients. */
         listRewind(server.clients,&li);
+        NOT_IMPLEMENTED;
         while ((ln = listNext(&li)) != NULL) {
             client *client = listNodeValue(ln);
+            NOT_IMPLEMENTED;
             if (addr && strcmp(getClientPeerId(client),addr) != 0) continue;
             if (laddr && strcmp(getClientSockname(client),laddr) != 0) continue;
             if (type != -1 && getClientType(client) != type) continue;
@@ -2646,6 +2715,7 @@ NULL
         if (getLongLongFromObjectOrReply(c,c->argv[2],&id,NULL)
             != C_OK) return;
         struct client *target = lookupClientByID(id);
+        NOT_IMPLEMENTED;
         if (target && target->flags & CLIENT_BLOCKED) {
             if (unblock_error)
                 addReplyError(target,
@@ -3221,6 +3291,7 @@ void flushSlavesOutputBuffers(void) {
     listRewind(server.slaves,&li);
     while((ln = listNext(&li))) {
         client *slave = listNodeValue(ln);
+        acquireClient(slave);
         int can_receive_writes = connHasWriteHandler(slave->conn) ||
                                  (slave->flags & CLIENT_PENDING_WRITE);
 
@@ -3245,6 +3316,7 @@ void flushSlavesOutputBuffers(void) {
         {
             writeToClient(slave,0);
         }
+        releaseClient(slave);
     }
 }
 
@@ -3291,7 +3363,9 @@ void unpauseClients(void) {
     listRewind(server.paused_clients,&li);
     while ((ln = listNext(&li)) != NULL) {
         c = listNodeValue(ln);
+        acquireClient(c);
         unblockClient(c);
+        releaseClient(c);
     }
 }
 
@@ -3412,6 +3486,7 @@ void *IOThreadMain(void *myid) {
         listRewind(io_threads_list[id],&li);
         while((ln = listNext(&li))) {
             client *c = listNodeValue(ln);
+            acquireClient(c);
             if (io_threads_op == IO_THREADS_OP_WRITE) {
                 writeToClient(c,0);
             } else if (io_threads_op == IO_THREADS_OP_READ) {
@@ -3419,12 +3494,14 @@ void *IOThreadMain(void *myid) {
             } else {
                 serverPanic("io_threads_op value is unknown");
             }
+            releaseClient(c);
         }
         listEmpty(io_threads_list[id]);
         setIOPendingCount(id, 0);
     }
 }
 
+// Initialize IO threads
 /* Initialize the data structures needed for threaded I/O. */
 void initThreadedIO(void) {
     server.io_threads_active = 0; /* We start with threads not active. */
@@ -3535,17 +3612,20 @@ int handleClientsWithPendingWritesUsingThreads(void) {
     int item_id = 0;
     while((ln = listNext(&li))) {
         client *c = listNodeValue(ln);
+        acquireClient(c);
         c->flags &= ~CLIENT_PENDING_WRITE;
 
         /* Remove clients from the list of pending writes since
          * they are going to be closed ASAP. */
         if (c->flags & CLIENT_CLOSE_ASAP) {
             listDelNode(server.clients_pending_write, ln);
+            releaseClient(c);
             continue;
         }
 
         int target_id = item_id % server.io_threads_num;
         listAddNodeTail(io_threads_list[target_id],c);
+        releaseClient(c);
         item_id++;
     }
 
@@ -3561,7 +3641,9 @@ int handleClientsWithPendingWritesUsingThreads(void) {
     listRewind(io_threads_list[0],&li);
     while((ln = listNext(&li))) {
         client *c = listNodeValue(ln);
+        acquireClient(c);
         writeToClient(c,0);
+        releaseClient(c);
     }
     listEmpty(io_threads_list[0]);
 
@@ -3578,6 +3660,7 @@ int handleClientsWithPendingWritesUsingThreads(void) {
     listRewind(server.clients_pending_write,&li);
     while((ln = listNext(&li))) {
         client *c = listNodeValue(ln);
+        acquireClient(c);
 
         /* Install the write handler if there are pending writes in some
          * of the clients. */
@@ -3586,6 +3669,7 @@ int handleClientsWithPendingWritesUsingThreads(void) {
         {
             freeClientAsync(c);
         }
+        releaseClient(c);
     }
     listEmpty(server.clients_pending_write);
 
@@ -3628,9 +3712,11 @@ int handleClientsWithPendingReadsUsingThreads(void) {
     listIter li;
     listNode *ln;
     listRewind(server.clients_pending_read,&li);
+    NOT_IMPLEMENTED;
     int item_id = 0;
     while((ln = listNext(&li))) {
         client *c = listNodeValue(ln);
+        NOT_IMPLEMENTED;
         int target_id = item_id % server.io_threads_num;
         listAddNodeTail(io_threads_list[target_id],c);
         item_id++;
@@ -3648,6 +3734,7 @@ int handleClientsWithPendingReadsUsingThreads(void) {
     listRewind(io_threads_list[0],&li);
     while((ln = listNext(&li))) {
         client *c = listNodeValue(ln);
+        NOT_IMPLEMENTED;
         readQueryFromClient(c->conn);
     }
     listEmpty(io_threads_list[0]);
@@ -3663,7 +3750,9 @@ int handleClientsWithPendingReadsUsingThreads(void) {
     /* Run the list of clients again to process the new buffers. */
     while(listLength(server.clients_pending_read)) {
         ln = listFirst(server.clients_pending_read);
+        NOT_IMPLEMENTED;
         client *c = listNodeValue(ln);
+        NOT_IMPLEMENTED;
         c->flags &= ~CLIENT_PENDING_READ;
         listDelNode(server.clients_pending_read,ln);
 

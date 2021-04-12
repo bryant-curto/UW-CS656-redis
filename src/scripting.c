@@ -31,6 +31,7 @@
 #include "sha1.h"
 #include "rand.h"
 #include "cluster.h"
+#include "my-defs.h"
 
 #include <lua.h>
 #include <lauxlib.h>
@@ -473,6 +474,7 @@ int luaRedisGenericCommand(lua_State *lua, int raise_error) {
     int j, argc = lua_gettop(lua);
     struct redisCommand *cmd;
     client *c = server.lua_client;
+    NOT_IMPLEMENTED;
     sds reply;
 
     /* Cached across calls. */

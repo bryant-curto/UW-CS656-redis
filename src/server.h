@@ -942,6 +942,12 @@ typedef struct client {
     /* Response buffer */
     int bufpos;
     char buf[PROTO_REPLY_CHUNK_BYTES];
+
+    /* members for permitting concurrent writing to sockets */
+    pthread_spinlock_t mutex;
+    int is_deleted;
+    pthread_t thread_id;
+    unsigned lock_depth;
 } client;
 
 struct saveparam {

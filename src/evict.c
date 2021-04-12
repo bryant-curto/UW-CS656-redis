@@ -33,6 +33,7 @@
 #include "server.h"
 #include "bio.h"
 #include "atomicvar.h"
+#include "my-defs.h"
 #include <math.h>
 
 /* ----------------------------------------------------------------------------
@@ -336,8 +337,10 @@ size_t freeMemoryGetNotCountedMemory(void) {
         listNode *ln;
 
         listRewind(server.slaves,&li);
+        NOT_IMPLEMENTED;
         while((ln = listNext(&li))) {
             client *slave = listNodeValue(ln);
+            NOT_IMPLEMENTED;
             overhead += getClientOutputBufferMemoryUsage(slave);
         }
     }

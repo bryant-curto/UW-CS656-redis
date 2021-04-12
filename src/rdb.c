@@ -32,6 +32,7 @@
 #include "zipmap.h"
 #include "endianconv.h"
 #include "stream.h"
+#include "my-defs.h"
 
 #include <math.h>
 #include <fcntl.h>
@@ -1527,6 +1528,7 @@ robj *rdbLoadObject(int rdbtype, rio *rdb, sds key) {
     if (server.sanitize_dump_payload == SANITIZE_DUMP_CLIENTS) {
         /* Skip sanitization when loading (an RDB), or getting a RESTORE command
          * from either the master or a client using an ACL user with the skip-sanitize-payload flag. */
+        NOT_IMPLEMENTED;
         int skip = server.loading ||
             (server.current_client && (server.current_client->flags & CLIENT_MASTER));
         if (!skip && server.current_client && server.current_client->user)
@@ -2776,8 +2778,10 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
     server.rdb_pipe_numconns = 0;
     server.rdb_pipe_numconns_writing = 0;
     listRewind(server.slaves,&li);
+    NOT_IMPLEMENTED;
     while((ln = listNext(&li))) {
         client *slave = ln->value;
+        NOT_IMPLEMENTED;
         if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
             server.rdb_pipe_conns[server.rdb_pipe_numconns++] = slave->conn;
             replicationSetupSlaveForFullResync(slave,getPsyncInitialOffset());
@@ -2823,8 +2827,10 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
              * all the slaves in BGSAVE_START state, but an early call to
              * replicationSetupSlaveForFullResync() turned it into BGSAVE_END */
             listRewind(server.slaves,&li);
+            NOT_IMPLEMENTED;
             while((ln = listNext(&li))) {
                 client *slave = ln->value;
+                NOT_IMPLEMENTED;
                 if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_END) {
                     slave->replstate = SLAVE_STATE_WAIT_BGSAVE_START;
                 }

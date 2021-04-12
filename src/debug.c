@@ -32,6 +32,7 @@
 #include "sha1.h"   /* SHA1 is used for DEBUG DIGEST */
 #include "crc64.h"
 #include "bio.h"
+#include "my-defs.h"
 
 #include <arpa/inet.h>
 #include <signal.h>
@@ -1605,6 +1606,7 @@ void logCurrentClient(void) {
     if (server.current_client == NULL) return;
 
     client *cc = server.current_client;
+    NOT_IMPLEMENTED;
     sds client;
     int j;
 

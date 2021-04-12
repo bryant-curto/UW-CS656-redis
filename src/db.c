@@ -30,6 +30,7 @@
 #include "server.h"
 #include "cluster.h"
 #include "atomicvar.h"
+#include "my-defs.h"
 
 #include <signal.h>
 #include <ctype.h>
@@ -123,6 +124,7 @@ robj *lookupKeyReadWithFlags(redisDb *db, robj *key, int flags) {
          * will say the key as non existing.
          *
          * Notably this covers GETs when slaves are used to scale reads. */
+        NOT_IMPLEMENTED;
         if (server.current_client &&
             server.current_client != server.master &&
             server.current_client->cmd &&

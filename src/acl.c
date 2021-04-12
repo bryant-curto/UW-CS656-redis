@@ -31,6 +31,7 @@
 #include "sha256.h"
 #include <fcntl.h>
 #include <ctype.h>
+#include "my-defs.h"
 
 /* =============================================================================
  * Global state for ACLs
@@ -299,8 +300,10 @@ void ACLFreeUserAndKillClients(user *u) {
     listIter li;
     listNode *ln;
     listRewind(server.clients,&li);
+    NOT_IMPLEMENTED;
     while ((ln = listNext(&li)) != NULL) {
         client *c = listNodeValue(ln);
+        NOT_IMPLEMENTED;
         if (c->user == u) {
             /* We'll free the connection asynchronously, so
              * in theory to set a different user is not needed.
@@ -1294,8 +1297,10 @@ void ACLKillPubsubClientsIfNeeded(user *u, list *upcoming) {
 
     /* Scan all connected clients to find the user's pub/subs. */
     listRewind(server.clients,&li);
+    NOT_IMPLEMENTED;
     while ((ln = listNext(&li)) != NULL) {
         client *c = listNodeValue(ln);
+        NOT_IMPLEMENTED;
         kill = 0;
 
         if (c->user == u && getClientType(c) == CLIENT_TYPE_PUBSUB) {
@@ -1798,6 +1803,7 @@ void addACLLogEntry(client *c, int reason, int argpos, sds username) {
     }
 
     client *realclient = c;
+    NOT_IMPLEMENTED;
     if (realclient->flags & CLIENT_LUA) realclient = server.lua_caller;
 
     le->cinfo = catClientInfoString(sdsempty(),realclient);

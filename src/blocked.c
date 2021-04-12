@@ -64,6 +64,7 @@
 #include "slowlog.h"
 #include "latency.h"
 #include "monotonic.h"
+#include "my-defs.h"
 
 int serveClientBlockedOnList(client *receiver, robj *key, robj *dstkey, redisDb *db, robj *value, int wherefrom, int whereto);
 int getListPositionFromObjectOrReply(client *c, robj *arg, int *position);
@@ -120,6 +121,7 @@ void updateStatsOnUnblock(client *c, long blocked_us, long reply_us){
 void processUnblockedClients(void) {
     listNode *ln;
     client *c;
+    NOT_IMPLEMENTED;
 
     while (listLength(server.unblocked_clients)) {
         ln = listFirst(server.unblocked_clients);
@@ -227,8 +229,10 @@ void disconnectAllBlockedClients(void) {
     listIter li;
 
     listRewind(server.clients,&li);
+    NOT_IMPLEMENTED;
     while((ln = listNext(&li))) {
         client *c = listNodeValue(ln);
+        NOT_IMPLEMENTED;
 
         if (c->flags & CLIENT_BLOCKED) {
             /* PAUSED clients are an exception, when they'll be unblocked, the
@@ -261,6 +265,7 @@ void serveClientsBlockedOnListKey(robj *o, readyList *rl) {
         while(numclients--) {
             listNode *clientnode = listFirst(clients);
             client *receiver = clientnode->value;
+            NOT_IMPLEMENTED;
 
             if (receiver->btype != BLOCKED_LIST) {
                 /* Put at the tail, so that at the next call
@@ -324,6 +329,7 @@ void serveClientsBlockedOnSortedSetKey(robj *o, readyList *rl) {
         while(numclients-- && zcard) {
             listNode *clientnode = listFirst(clients);
             client *receiver = clientnode->value;
+            NOT_IMPLEMENTED;
 
             if (receiver->btype != BLOCKED_ZSET) {
                 /* Put at the tail, so that at the next call
@@ -376,6 +382,7 @@ void serveClientsBlockedOnStreamKey(robj *o, readyList *rl) {
 
         while((ln = listNext(&li))) {
             client *receiver = listNodeValue(ln);
+            NOT_IMPLEMENTED;
             if (receiver->btype != BLOCKED_STREAM) continue;
             bkinfo *bki = dictFetchValue(receiver->bpop.keys,rl->key);
             streamID *gt = &bki->stream_id;
@@ -481,6 +488,7 @@ void serveClientsBlockedOnKeyByModule(readyList *rl) {
         while(numclients--) {
             listNode *clientnode = listFirst(clients);
             client *receiver = clientnode->value;
+            NOT_IMPLEMENTED;
 
             /* Put at the tail, so that at the next call
              * we'll not run into it again: clients here may not be

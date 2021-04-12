@@ -57,6 +57,7 @@
  * from tail to head, useful for ZREVRANGE. */
 
 #include "server.h"
+#include "my-defs.h"
 #include <math.h>
 
 /*-----------------------------------------------------------------------------
@@ -1666,6 +1667,7 @@ sds zsetSdsFromZiplistEntry(ziplistEntry *e) {
 
 /* Reply with bulk string from the ziplist entry. */
 void zsetReplyFromZiplistEntry(client *c, ziplistEntry *e) {
+    NOT_IMPLEMENTED;
     if (e->sval)
         addReplyBulkCBuffer(c, e->sval, e->slen);
     else
@@ -1707,6 +1709,7 @@ void zsetTypeRandomElement(robj *zsetobj, unsigned long zsetsize, ziplistEntry *
 
 /* This generic command implements both ZADD and ZINCRBY. */
 void zaddGenericCommand(client *c, int flags) {
+    NOT_IMPLEMENTED;
     static char *nanerr = "resulting score is not a number (NaN)";
     robj *key = c->argv[1];
     robj *zobj;
@@ -1836,14 +1839,17 @@ cleanup:
 }
 
 void zaddCommand(client *c) {
+    NOT_IMPLEMENTED;
     zaddGenericCommand(c,ZADD_NONE);
 }
 
 void zincrbyCommand(client *c) {
+    NOT_IMPLEMENTED;
     zaddGenericCommand(c,ZADD_INCR);
 }
 
 void zremCommand(client *c) {
+    NOT_IMPLEMENTED;
     robj *key = c->argv[1];
     robj *zobj;
     int deleted = 0, keyremoved = 0, j;
@@ -1879,6 +1885,7 @@ typedef enum {
 
 /* Implements ZREMRANGEBYRANK, ZREMRANGEBYSCORE, ZREMRANGEBYLEX commands. */
 void zremrangeGenericCommand(client *c, zrange_type rangetype) {
+    NOT_IMPLEMENTED;
     robj *key = c->argv[1];
     robj *zobj;
     int keyremoved = 0;
@@ -1986,14 +1993,17 @@ cleanup:
 }
 
 void zremrangebyrankCommand(client *c) {
+    NOT_IMPLEMENTED;
     zremrangeGenericCommand(c,ZRANGE_RANK);
 }
 
 void zremrangebyscoreCommand(client *c) {
+    NOT_IMPLEMENTED;
     zremrangeGenericCommand(c,ZRANGE_SCORE);
 }
 
 void zremrangebylexCommand(client *c) {
+    NOT_IMPLEMENTED;
     zremrangeGenericCommand(c,ZRANGE_LEX);
 }
 
@@ -2560,6 +2570,7 @@ dictType setAccumulatorDictType = {
  * 'op' SET_OP_INTER, SET_OP_UNION or SET_OP_DIFF.
  */
 void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, int op) {
+    NOT_IMPLEMENTED;
     int i, j;
     long setnum;
     int aggregate = REDIS_AGGR_SUM;
@@ -2819,26 +2830,32 @@ void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, in
 }
 
 void zunionstoreCommand(client *c) {
+    NOT_IMPLEMENTED;
     zunionInterDiffGenericCommand(c, c->argv[1], 2, SET_OP_UNION);
 }
 
 void zinterstoreCommand(client *c) {
+    NOT_IMPLEMENTED;
     zunionInterDiffGenericCommand(c, c->argv[1], 2, SET_OP_INTER);
 }
 
 void zdiffstoreCommand(client *c) {
+    NOT_IMPLEMENTED;
     zunionInterDiffGenericCommand(c, c->argv[1], 2, SET_OP_DIFF);
 }
 
 void zunionCommand(client *c) {
+    NOT_IMPLEMENTED;
     zunionInterDiffGenericCommand(c, NULL, 1, SET_OP_UNION);
 }
 
 void zinterCommand(client *c) {
+    NOT_IMPLEMENTED;
     zunionInterDiffGenericCommand(c, NULL, 1, SET_OP_INTER);
 }
 
 void zdiffCommand(client *c) {
+    NOT_IMPLEMENTED;
     zunionInterDiffGenericCommand(c, NULL, 1, SET_OP_DIFF);
 }
 
@@ -2885,12 +2902,14 @@ struct zrange_result_handler {
 
 /* Result handler methods for responding the ZRANGE to clients. */
 static void zrangeResultBeginClient(zrange_result_handler *handler) {
+    NOT_IMPLEMENTED;
     handler->userdata = addReplyDeferredLen(handler->client);
 }
 
 static void zrangeResultEmitCBufferToClient(zrange_result_handler *handler,
     const void *value, size_t value_length_in_bytes, double score)
 {
+    NOT_IMPLEMENTED;
     if (handler->should_emit_array_length) {
         addReplyArrayLen(handler->client, 2);
     }
@@ -2905,6 +2924,7 @@ static void zrangeResultEmitCBufferToClient(zrange_result_handler *handler,
 static void zrangeResultEmitLongLongToClient(zrange_result_handler *handler,
     long long value, double score)
 {
+    NOT_IMPLEMENTED;
     if (handler->should_emit_array_length) {
         addReplyArrayLen(handler->client, 2);
     }
@@ -2919,6 +2939,7 @@ static void zrangeResultEmitLongLongToClient(zrange_result_handler *handler,
 static void zrangeResultFinalizeClient(zrange_result_handler *handler,
     size_t result_count)
 {
+    NOT_IMPLEMENTED;
     /* In case of WITHSCORES, respond with a single array in RESP2, and
      * nested arrays in RESP3. We can't use a map response type since the
      * client library needs to know to respect the order. */
@@ -2959,6 +2980,7 @@ static void zrangeResultEmitLongLongForStore(zrange_result_handler *handler,
 
 static void zrangeResultFinalizeStore(zrange_result_handler *handler, size_t result_count)
 {
+    NOT_IMPLEMENTED;
     if (result_count) {
         setKey(handler->client, handler->client->db, handler->dstkey, handler->dstobj);
         addReplyLongLong(handler->client, result_count);
@@ -2979,6 +3001,7 @@ static void zrangeResultFinalizeStore(zrange_result_handler *handler, size_t res
 static void zrangeResultHandlerInit(zrange_result_handler *handler,
     client *client, zrange_consumer_type type)
 {
+    NOT_IMPLEMENTED;
     memset(handler, 0, sizeof(*handler));
 
     handler->client = client;
@@ -3001,6 +3024,7 @@ static void zrangeResultHandlerInit(zrange_result_handler *handler,
 }
 
 static void zrangeResultHandlerScoreEmissionEnable(zrange_result_handler *handler) {
+    NOT_IMPLEMENTED;
     handler->withscores = 1;
     handler->should_emit_array_length = (handler->client->resp > 2);
 }
@@ -3014,6 +3038,7 @@ static void zrangeResultHandlerDestinationKeySet (zrange_result_handler *handler
 /* This command implements ZRANGE, ZREVRANGE. */
 void genericZrangebyrankCommand(zrange_result_handler *handler,
     robj *zobj, long start, long end, int withscores, int reverse) {
+    NOT_IMPLEMENTED;
 
     client *c = handler->client;
     long llen;
@@ -3104,6 +3129,7 @@ void genericZrangebyrankCommand(zrange_result_handler *handler,
 
 /* ZRANGESTORE <dst> <src> <min> <max> [BYSCORE | BYLEX] [REV] [LIMIT offset count] */
 void zrangestoreCommand (client *c) {
+    NOT_IMPLEMENTED;
     robj *dstkey = c->argv[1];
     zrange_result_handler handler;
     zrangeResultHandlerInit(&handler, c, ZRANGE_CONSUMER_TYPE_INTERNAL);
@@ -3113,6 +3139,7 @@ void zrangestoreCommand (client *c) {
 
 /* ZRANGE <key> <min> <max> [BYSCORE | BYLEX] [REV] [WITHSCORES] [LIMIT offset count] */
 void zrangeCommand(client *c) {
+    NOT_IMPLEMENTED;
     zrange_result_handler handler;
     zrangeResultHandlerInit(&handler, c, ZRANGE_CONSUMER_TYPE_CLIENT);
     zrangeGenericCommand(&handler, 1, 0, ZRANGE_AUTO, ZRANGE_DIRECTION_AUTO);
@@ -3120,6 +3147,7 @@ void zrangeCommand(client *c) {
 
 /* ZREVRANGE <key> <min> <max> [WITHSCORES] */
 void zrevrangeCommand(client *c) {
+    NOT_IMPLEMENTED;
     zrange_result_handler handler;
     zrangeResultHandlerInit(&handler, c, ZRANGE_CONSUMER_TYPE_CLIENT);
     zrangeGenericCommand(&handler, 1, 0, ZRANGE_RANK, ZRANGE_DIRECTION_REVERSE);
@@ -3129,6 +3157,7 @@ void zrevrangeCommand(client *c) {
 void genericZrangebyscoreCommand(zrange_result_handler *handler,
     zrangespec *range, robj *zobj, long offset, long limit, 
     int reverse) {
+    NOT_IMPLEMENTED;
 
     client *c = handler->client;
     unsigned long rangelen = 0;
@@ -3246,6 +3275,7 @@ void genericZrangebyscoreCommand(zrange_result_handler *handler,
 
 /* ZRANGEBYSCORE <key> <min> <max> [WITHSCORES] [LIMIT offset count] */
 void zrangebyscoreCommand(client *c) {
+    NOT_IMPLEMENTED;
     zrange_result_handler handler;
     zrangeResultHandlerInit(&handler, c, ZRANGE_CONSUMER_TYPE_CLIENT);
     zrangeGenericCommand(&handler, 1, 0, ZRANGE_SCORE, ZRANGE_DIRECTION_FORWARD);
@@ -3253,12 +3283,14 @@ void zrangebyscoreCommand(client *c) {
 
 /* ZREVRANGEBYSCORE <key> <min> <max> [WITHSCORES] [LIMIT offset count] */
 void zrevrangebyscoreCommand(client *c) {
+    NOT_IMPLEMENTED;
     zrange_result_handler handler;
     zrangeResultHandlerInit(&handler, c, ZRANGE_CONSUMER_TYPE_CLIENT);
     zrangeGenericCommand(&handler, 1, 0, ZRANGE_SCORE, ZRANGE_DIRECTION_REVERSE);
 }
 
 void zcountCommand(client *c) {
+    NOT_IMPLEMENTED;
     robj *key = c->argv[1];
     robj *zobj;
     zrangespec range;
@@ -3336,6 +3368,7 @@ void zcountCommand(client *c) {
 }
 
 void zlexcountCommand(client *c) {
+    NOT_IMPLEMENTED;
     robj *key = c->argv[1];
     robj *zobj;
     zlexrangespec range;
@@ -3419,6 +3452,7 @@ void genericZrangebylexCommand(zrange_result_handler *handler,
     zlexrangespec *range, robj *zobj, int withscores, long offset, long limit,
     int reverse)
 {
+    NOT_IMPLEMENTED;
     client *c = handler->client;
     unsigned long rangelen = 0;
 
@@ -3531,6 +3565,7 @@ void genericZrangebylexCommand(zrange_result_handler *handler,
 
 /* ZRANGEBYLEX <key> <min> <max> [LIMIT offset count] */
 void zrangebylexCommand(client *c) {
+    NOT_IMPLEMENTED;
     zrange_result_handler handler;
     zrangeResultHandlerInit(&handler, c, ZRANGE_CONSUMER_TYPE_CLIENT);
     zrangeGenericCommand(&handler, 1, 0, ZRANGE_LEX, ZRANGE_DIRECTION_FORWARD);
@@ -3538,6 +3573,7 @@ void zrangebylexCommand(client *c) {
 
 /* ZREVRANGEBYLEX <key> <min> <max> [LIMIT offset count] */
 void zrevrangebylexCommand(client *c) {
+    NOT_IMPLEMENTED;
     zrange_result_handler handler;
     zrangeResultHandlerInit(&handler, c, ZRANGE_CONSUMER_TYPE_CLIENT);
     zrangeGenericCommand(&handler, 1, 0, ZRANGE_LEX, ZRANGE_DIRECTION_REVERSE);
@@ -3556,6 +3592,7 @@ void zrevrangebylexCommand(client *c) {
 void zrangeGenericCommand(zrange_result_handler *handler, int argc_start, int store,
                           zrange_type rangetype, zrange_direction direction)
 {
+    NOT_IMPLEMENTED;
     client *c = handler->client;
     robj *key = c->argv[argc_start];
     robj *zobj;
@@ -3699,6 +3736,7 @@ cleanup:
 }
 
 void zcardCommand(client *c) {
+    NOT_IMPLEMENTED;
     robj *key = c->argv[1];
     robj *zobj;
 
@@ -3709,6 +3747,7 @@ void zcardCommand(client *c) {
 }
 
 void zscoreCommand(client *c) {
+    NOT_IMPLEMENTED;
     robj *key = c->argv[1];
     robj *zobj;
     double score;
@@ -3724,6 +3763,7 @@ void zscoreCommand(client *c) {
 }
 
 void zmscoreCommand(client *c) {
+    NOT_IMPLEMENTED;
     robj *key = c->argv[1];
     robj *zobj;
     double score;
@@ -3742,6 +3782,7 @@ void zmscoreCommand(client *c) {
 }
 
 void zrankGenericCommand(client *c, int reverse) {
+    NOT_IMPLEMENTED;
     robj *key = c->argv[1];
     robj *ele = c->argv[2];
     robj *zobj;
@@ -3760,14 +3801,17 @@ void zrankGenericCommand(client *c, int reverse) {
 }
 
 void zrankCommand(client *c) {
+    NOT_IMPLEMENTED;
     zrankGenericCommand(c, 0);
 }
 
 void zrevrankCommand(client *c) {
+    NOT_IMPLEMENTED;
     zrankGenericCommand(c, 1);
 }
 
 void zscanCommand(client *c) {
+    NOT_IMPLEMENTED;
     robj *o;
     unsigned long cursor;
 
@@ -3787,6 +3831,7 @@ void zscanCommand(client *c) {
  * The synchronous version instead does not need to emit the key, but may
  * use the 'count' argument to return multiple items if available. */
 void genericZpopCommand(client *c, robj **keyv, int keyc, int where, int emitkey, robj *countarg) {
+    NOT_IMPLEMENTED;
     int idx;
     robj *key = NULL;
     robj *zobj = NULL;
@@ -3892,6 +3937,7 @@ void genericZpopCommand(client *c, robj **keyv, int keyc, int where, int emitkey
 
 /* ZPOPMIN key [<count>] */
 void zpopminCommand(client *c) {
+    NOT_IMPLEMENTED;
     if (c->argc > 3) {
         addReplyErrorObject(c,shared.syntaxerr);
         return;
@@ -3902,6 +3948,7 @@ void zpopminCommand(client *c) {
 
 /* ZMAXPOP key [<count>] */
 void zpopmaxCommand(client *c) {
+    NOT_IMPLEMENTED;
     if (c->argc > 3) {
         addReplyErrorObject(c,shared.syntaxerr);
         return;
@@ -3912,6 +3959,7 @@ void zpopmaxCommand(client *c) {
 
 /* BZPOPMIN / BZPOPMAX actual implementation. */
 void blockingGenericZpopCommand(client *c, int where) {
+    NOT_IMPLEMENTED;
     robj *o;
     mstime_t timeout;
     int j;
@@ -3948,15 +3996,18 @@ void blockingGenericZpopCommand(client *c, int where) {
 
 // BZPOPMIN key [key ...] timeout
 void bzpopminCommand(client *c) {
+    NOT_IMPLEMENTED;
     blockingGenericZpopCommand(c,ZSET_MIN);
 }
 
 // BZPOPMAX key [key ...] timeout
 void bzpopmaxCommand(client *c) {
+    NOT_IMPLEMENTED;
     blockingGenericZpopCommand(c,ZSET_MAX);
 }
 
 static void zarndmemberReplyWithZiplist(client *c, unsigned int count, ziplistEntry *keys, ziplistEntry *vals) {
+    NOT_IMPLEMENTED;
     for (unsigned long i = 0; i < count; i++) {
         if (vals && c->resp > 2)
             addReplyArrayLen(c,2);
@@ -3984,6 +4035,7 @@ static void zarndmemberReplyWithZiplist(client *c, unsigned int count, ziplistEn
 #define ZRANDMEMBER_RANDOM_SAMPLE_LIMIT 1000
 
 void zrandmemberWithCountCommand(client *c, long l, int withscores) {
+    NOT_IMPLEMENTED;
     unsigned long count, size;
     int uniq = 1;
     robj *zsetobj;
@@ -4175,6 +4227,7 @@ void zrandmemberWithCountCommand(client *c, long l, int withscores) {
 
 /* ZRANDMEMBER [<count> WITHSCORES] */
 void zrandmemberCommand(client *c) {
+    NOT_IMPLEMENTED;
     long l;
     int withscores = 0;
     robj *zset;
