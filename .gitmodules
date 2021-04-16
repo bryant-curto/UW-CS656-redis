@@ -1,0 +1,3 @@
+[submodule "deps/scal"]
+	path = deps/scal
+	url = https://github.com/cksystemsgroup/scal.git

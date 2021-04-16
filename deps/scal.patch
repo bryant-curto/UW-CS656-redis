@@ -1,0 +1,168 @@
+diff --git a/src/benchmark/std_glue/glue_dds_1random_ms.cc b/src/benchmark/std_glue/glue_dds_1random_ms.cc
+index 67d62e7..f4428b5 100644
+--- a/src/benchmark/std_glue/glue_dds_1random_ms.cc
++++ b/src/benchmark/std_glue/glue_dds_1random_ms.cc
+@@ -40,5 +40,6 @@ char* ds_get_stats(void) {
+   }
+   char *newbuf = static_cast<char*>(calloc(
+       strlen(buffer) + 1, sizeof(*newbuf)));
+-  return strncpy(newbuf, buffer, strlen(buffer));
++  // Switched from strncpy() to silence gcc complaining
++  return strcpy(newbuf, buffer);
+ }
+diff --git a/src/benchmark/std_glue/glue_dds_1random_treiber.cc b/src/benchmark/std_glue/glue_dds_1random_treiber.cc
+index 953814a..6c278a5 100644
+--- a/src/benchmark/std_glue/glue_dds_1random_treiber.cc
++++ b/src/benchmark/std_glue/glue_dds_1random_treiber.cc
+@@ -40,5 +40,6 @@ char* ds_get_stats(void) {
+   }
+   char *newbuf = static_cast<char*>(calloc(
+       strlen(buffer) + 1, sizeof(*newbuf)));
+-  return strncpy(newbuf, buffer, strlen(buffer));
++  // Switched from strncpy() to silence gcc complaining
++  return strcpy(newbuf, buffer);
+ }
+diff --git a/src/benchmark/std_glue/glue_dds_partrr_ms.cc b/src/benchmark/std_glue/glue_dds_partrr_ms.cc
+index 529a298..ec87385 100644
+--- a/src/benchmark/std_glue/glue_dds_partrr_ms.cc
++++ b/src/benchmark/std_glue/glue_dds_partrr_ms.cc
+@@ -37,5 +37,6 @@ char* ds_get_stats(void) {
+   }
+   char *newbuf = static_cast<char*>(calloc(
+       strlen(buffer) + 1, sizeof(*newbuf)));
+-  return strncpy(newbuf, buffer, strlen(buffer));
++  // Switched from strncpy() to silence gcc complaining
++  return strcpy(newbuf, buffer);
+ }
+diff --git a/src/datastructures/cts_queue.h b/src/datastructures/cts_queue.h
+index f079e2b..106dc9a 100644
+--- a/src/datastructures/cts_queue.h
++++ b/src/datastructures/cts_queue.h
+@@ -250,7 +250,8 @@ class CTSQueue : Queue<T>{
+       }
+       char *newbuf = static_cast<char*>(calloc(
+           strlen(buffer) + 1, sizeof(*newbuf)));
+-      return strncpy(newbuf, buffer, strlen(buffer));
++      // Switched from strncpy() to silence gcc complaining
++      return strcpy(newbuf, buffer);
+ #else
+       return NULL;
+ #endif
+diff --git a/src/datastructures/elimination_backoff_stack.h b/src/datastructures/elimination_backoff_stack.h
+index eb7c897..2c93f05 100644
+--- a/src/datastructures/elimination_backoff_stack.h
++++ b/src/datastructures/elimination_backoff_stack.h
+@@ -70,7 +70,8 @@ class EliminationBackoffStack : public Stack<T> {
+     }
+     char *newbuf = static_cast<char*>(calloc(
+         strlen(buffer) + 1, sizeof(*newbuf)));
+-    return strncpy(newbuf, buffer, strlen(buffer));
++    // Switched from strncpy() to silence gcc complaining
++    return strcpy(newbuf, buffer);
+   }
+ 
+  private:
+diff --git a/src/datastructures/rts_queue.h b/src/datastructures/rts_queue.h
+index 7c0e603..079bd1a 100644
+--- a/src/datastructures/rts_queue.h
++++ b/src/datastructures/rts_queue.h
+@@ -159,7 +159,8 @@ class RTSQueue : Queue<T>{
+       }
+       char *newbuf = static_cast<char*>(calloc(
+           strlen(buffer) + 1, sizeof(*newbuf)));
+-      return strncpy(newbuf, buffer, strlen(buffer));
++      // Switched from strncpy() to silence gcc complaining
++      return strcpy(newbuf, buffer);
+ #else
+       return NULL;
+ #endif
+diff --git a/src/datastructures/ts_deque_buffer.h b/src/datastructures/ts_deque_buffer.h
+index 44f1527..c887920 100644
+--- a/src/datastructures/ts_deque_buffer.h
++++ b/src/datastructures/ts_deque_buffer.h
+@@ -231,7 +231,8 @@ class TSDequeBuffer {
+       }
+       char *newbuf = static_cast<char*>(calloc(
+           strlen(buffer) + 1, sizeof(*newbuf)));
+-      return strncpy(newbuf, buffer, strlen(buffer));
++      // Switched from strncpy() to silence gcc complaining
++      return strcpy(newbuf, buffer);
+     }
+ 
+     inline std::atomic<uint64_t> *insert_left(T element) {
+diff --git a/src/datastructures/ts_queue_buffer.h b/src/datastructures/ts_queue_buffer.h
+index e4db220..2203daa 100644
+--- a/src/datastructures/ts_queue_buffer.h
++++ b/src/datastructures/ts_queue_buffer.h
+@@ -228,7 +228,8 @@ class TSQueueBuffer {
+       }
+       char *newbuf = static_cast<char*>(calloc(
+           strlen(buffer) + 1, sizeof(*newbuf)));
+-      return strncpy(newbuf, buffer, strlen(buffer));
++      // Switched from strncpy() to silence gcc complaining
++      return strcpy(newbuf, buffer);
+     }
+ 
+ 
+diff --git a/src/datastructures/ts_stack_buffer.h b/src/datastructures/ts_stack_buffer.h
+index 33d24c1..246262d 100644
+--- a/src/datastructures/ts_stack_buffer.h
++++ b/src/datastructures/ts_stack_buffer.h
+@@ -270,7 +270,8 @@ class TSStackBuffer {
+       }
+       char *newbuf = static_cast<char*>(calloc(
+           strlen(buffer) + 1, sizeof(*newbuf)));
+-      return strncpy(newbuf, buffer, strlen(buffer));
++      // Switched from strncpy() to silence gcc complaining
++      return strcpy(newbuf, buffer);
+     }
+ 
+     inline std::atomic<uint64_t> *insert_right(T element) {
+diff --git a/src/datastructures/upstream/sim-synch1.4/primitives.h b/src/datastructures/upstream/sim-synch1.4/primitives.h
+index cc0fe8c..29b6231 100644
+--- a/src/datastructures/upstream/sim-synch1.4/primitives.h
++++ b/src/datastructures/upstream/sim-synch1.4/primitives.h
+@@ -6,7 +6,7 @@
+ #include <math.h>
+ #include <math.h>
+ #include <inttypes.h>
+-#include <sys/timeb.h>
++#include <time.h>
+ #include <malloc.h>
+ 
+ #include "stats.h"
+@@ -36,10 +36,12 @@ inline static void *getAlignedMemory(size_t align, size_t size) {
+ }
+ 
+ inline static int64_t getTimeMillis(void) {
+-    struct timeb tm;
+-
+-    ftime(&tm);
+-    return 1000 * tm.time + tm.millitm;
++    struct timespec tp;
++    if (0 != clock_gettime(CLOCK_REALTIME, &tp)) {
++        perror("clock_gettime");
++        exit(EXIT_FAILURE);
++    }
++    return 1000 * tp.tv_sec + (tp.tv_nsec / 1000000L);
+ }
+ 
+ __thread volatile int_aligned64_t __fence_var;
+@@ -223,7 +225,7 @@ inline static bool _CAS32(uint32_t *A, uint32_t B, uint32_t C) {
+ }
+ 
+ #define CAS64(A, B, C) _CAS64((uint64_t *)A, (uint64_t)B, (uint64_t)C)
+-inline static bool _CAS64(uint64_t *A, uint64_t B, uint64_t C) {
++inline bool _CAS64(uint64_t *A, uint64_t B, uint64_t C) {
+ #ifdef DEBUG
+     int res;
+ 
+@@ -310,7 +312,7 @@ inline static uint32_t _FAA32(volatile uint32_t *A, uint32_t B) {
+ }
+ 
+ #define FAA64(A, B) _FAA64((volatile int64_t *)A, (int64_t)B)
+-inline static int64_t _FAA64(volatile int64_t *A, int64_t B) {
++inline int64_t _FAA64(volatile int64_t *A, int64_t B) {
+ 
+ #if defined(_EMULATE_FAA_)
+ #    warning Fetch&Add instructions are simulated!
