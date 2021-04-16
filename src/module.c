@@ -5557,6 +5557,7 @@ void moduleHandleBlockedClients(void) {
             {
                 c->flags |= CLIENT_PENDING_WRITE;
                 listAddNodeHead(server.clients_pending_write,c);
+                NOT_IMPLEMENTED;
             }
         }
 

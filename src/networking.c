@@ -221,7 +221,9 @@ void clientInstallWriteHandler(client *c) {
          * a system call. We'll only really install the write handler if
          * we'll not be able to write the whole reply at once. */
         c->flags |= CLIENT_PENDING_WRITE;
-        listAddNodeHead(server.clients_pending_write,c);
+        assert(0 == pthread_spin_lock(&server.client_queue_mutex));
+        listAddNodeTail(server.client_queue, c);
+        assert(0 == pthread_spin_unlock(&server.client_queue_mutex));
     }
 }
 
@@ -1258,9 +1260,12 @@ void unlinkClient(client *c) {
 
     /* Remove from the list of pending writes if needed. */
     if (c->flags & CLIENT_PENDING_WRITE) {
-        ln = listSearchKey(server.clients_pending_write,c);
-        serverAssert(ln != NULL);
-        listDelNode(server.clients_pending_write,ln);
+        assert(0 == pthread_spin_lock(&server.client_queue_mutex));
+        ln = listSearchKey(server.client_queue,c);
+        if (NULL != ln) {
+            listDelNode(server.client_queue,ln);
+        }
+        assert(0 == pthread_spin_unlock(&server.client_queue_mutex));
         c->flags &= ~CLIENT_PENDING_WRITE;
     }
 
@@ -1613,16 +1618,20 @@ void sendReplyToClient(connection *conn) {
  * need to use a syscall in order to install the writable event handler,
  * get it called, and so forth. */
 int handleClientsWithPendingWrites(void) {
+    // This should only be executed when there's no IO threads
+    assert(1 == server.io_threads_num);
+
     listIter li;
     listNode *ln;
-    int processed = listLength(server.clients_pending_write);
+    assert(0 == pthread_spin_lock(&server.client_queue_mutex));
+    int processed = listLength(server.client_queue);
 
-    listRewind(server.clients_pending_write,&li);
+    listRewind(server.client_queue,&li);
     while((ln = listNext(&li))) {
         client *c = listNodeValue(ln);
         acquireClient(c);
         c->flags &= ~CLIENT_PENDING_WRITE;
-        listDelNode(server.clients_pending_write,ln);
+        listDelNode(server.client_queue,ln);
 
         /* If a client is protected, don't do anything,
          * that may trigger write error or recreate handler. */
@@ -1663,6 +1672,7 @@ int handleClientsWithPendingWrites(void) {
         }
         releaseClient(c);
     }
+    assert(0 == pthread_spin_unlock(&server.client_queue_mutex));
     return processed;
 }
 
@@ -1710,6 +1720,7 @@ void resetClient(client *c) {
  * 2) Moreover it makes sure that if the client is freed in a different code
  *    path, it is not really released, but only marked for later release. */
 void protectClient(client *c) {
+    NOT_IMPLEMENTED;
     c->flags |= CLIENT_PROTECTED;
     if (c->conn) {
         connSetReadHandler(c->conn,NULL);
@@ -1719,6 +1730,7 @@ void protectClient(client *c) {
 
 /* This will undo the client protection done by protectClient() */
 void unprotectClient(client *c) {
+    NOT_IMPLEMENTED;
     if (c->flags & CLIENT_PROTECTED) {
         c->flags &= ~CLIENT_PROTECTED;
         if (c->conn) {
@@ -3444,12 +3456,14 @@ int io_threads_op;      /* IO_THREADS_OP_WRITE or IO_THREADS_OP_READ. */
 list *io_threads_list[IO_THREADS_MAX_NUM];
 
 static inline unsigned long getIOPendingCount(int i) {
+    NOT_IMPLEMENTED;
     unsigned long count = 0;
     atomicGetWithSync(io_threads_pending[i], count);
     return count;
 }
 
 static inline void setIOPendingCount(int i, unsigned long count) {
+    NOT_IMPLEMENTED;
     atomicSetWithSync(io_threads_pending[i], count);
 }
 
@@ -3465,39 +3479,37 @@ void *IOThreadMain(void *myid) {
     makeThreadKillable();
 
     while(1) {
+        client *c;
         /* Wait for start */
         for (int j = 0; j < 1000000; j++) {
-            if (getIOPendingCount(id) != 0) break;
+            c = NULL;
+            pthread_spin_lock(&server.client_queue_mutex);
+            if (listLength(server.client_queue) > 0) {
+                listIter li;
+                listRewind(server.client_queue,&li);
+                listNode *ln = listNext(&li);
+                c = listNodeValue(ln);
+                listDelNode(server.client_queue, ln);
+                pthread_spin_unlock(&server.client_queue_mutex);
+                break;
+            }
+            pthread_spin_unlock(&server.client_queue_mutex);
         }
 
         /* Give the main thread a chance to stop this thread. */
-        if (getIOPendingCount(id) == 0) {
+        if (NULL == c) {
             pthread_mutex_lock(&io_threads_mutex[id]);
             pthread_mutex_unlock(&io_threads_mutex[id]);
             continue;
         }
 
-        serverAssert(getIOPendingCount(id) != 0);
-
-        /* Process: note that the main thread will never touch our list
-         * before we drop the pending count to 0. */
-        listIter li;
-        listNode *ln;
-        listRewind(io_threads_list[id],&li);
-        while((ln = listNext(&li))) {
-            client *c = listNodeValue(ln);
-            acquireClient(c);
-            if (io_threads_op == IO_THREADS_OP_WRITE) {
-                writeToClient(c,0);
-            } else if (io_threads_op == IO_THREADS_OP_READ) {
-                readQueryFromClient(c->conn);
-            } else {
-                serverPanic("io_threads_op value is unknown");
-            }
-            releaseClient(c);
-        }
-        listEmpty(io_threads_list[id]);
-        setIOPendingCount(id, 0);
+        acquireClient(c);
+        assert(c->flags & CLIENT_PENDING_WRITE);
+        c->flags &= ~CLIENT_PENDING_WRITE;
+        do {
+            writeToClient(c,0);
+        } while (clientHasPendingReplies(c));
+        releaseClient(c);
     }
 }
 
@@ -3525,7 +3537,6 @@ void initThreadedIO(void) {
         /* Things we do only for the additional threads. */
         pthread_t tid;
         pthread_mutex_init(&io_threads_mutex[i],NULL);
-        setIOPendingCount(i, 0);
         pthread_mutex_lock(&io_threads_mutex[i]); /* Thread will be stopped. */
         if (pthread_create(&tid,NULL,IOThreadMain,(void*)(long)i) != 0) {
             serverLog(LL_WARNING,"Fatal: Can't initialize IO thread.");
@@ -3579,6 +3590,11 @@ void stopThreadedIO(void) {
  * are enough active threads, otherwise 1 is returned and the I/O threads
  * could be possibly stopped (if already active) as a side effect. */
 int stopThreadedIOIfNeeded(void) {
+    return 0;
+
+    // NOTE: Nothing below this line gets executed! //
+    //==============================================//
+
     int pending = listLength(server.clients_pending_write);
 
     /* Return ASAP if IO threads are disabled (single threaded mode). */
@@ -3593,17 +3609,23 @@ int stopThreadedIOIfNeeded(void) {
 }
 
 int handleClientsWithPendingWritesUsingThreads(void) {
-    int processed = listLength(server.clients_pending_write);
-    if (processed == 0) return 0; /* Return ASAP if there are no clients. */
+    //int processed = listLength(server.clients_pending_write);
+    //if (processed == 0) return 0; /* Return ASAP if there are no clients. */
 
     /* If I/O threads are disabled or we have few clients to serve, don't
      * use I/O threads, but the boring synchronous code. */
-    if (server.io_threads_num == 1 || stopThreadedIOIfNeeded()) {
+    if (server.io_threads_num == 1) {
         return handleClientsWithPendingWrites();
     }
 
     /* Start threads if needed. */
     if (!server.io_threads_active) startThreadedIO();
+    return 0;
+
+    // NOTE: Nothing below this line gets executed! //
+    //==============================================//
+
+    int processed = 0;
 
     /* Distribute the clients across N different lists. */
     listIter li;
@@ -3674,6 +3696,7 @@ int handleClientsWithPendingWritesUsingThreads(void) {
     listEmpty(server.clients_pending_write);
 
     /* Update processed count on server */
+    // TODO: FIX! server stats are not accurate!
     server.stat_io_writes_processed += processed;
 
     return processed;
@@ -3705,6 +3728,7 @@ int postponeClientRead(client *c) {
  * rendering it in the client structures. */
 int handleClientsWithPendingReadsUsingThreads(void) {
     if (!server.io_threads_active || !server.io_threads_do_reads) return 0;
+    NOT_IMPLEMENTED;
     int processed = listLength(server.clients_pending_read);
     if (processed == 0) return 0;
 
