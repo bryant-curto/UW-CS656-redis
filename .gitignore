@@ -12,6 +12,7 @@ redis-check-dump
 redis-cli
 redis-sentinel
 redis-server
+concurrent-queue-test
 doc-tools
 release
 misc/*

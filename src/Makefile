@@ -283,7 +283,7 @@ REDIS_BENCHMARK_OBJ=ae.o anet.o redis-benchmark.o adlist.o dict.o zmalloc.o rele
 REDIS_CHECK_RDB_NAME=redis-check-rdb$(PROG_SUFFIX)
 REDIS_CHECK_AOF_NAME=redis-check-aof$(PROG_SUFFIX)
 
-all: $(REDIS_SERVER_NAME) $(REDIS_SENTINEL_NAME) $(REDIS_CLI_NAME) $(REDIS_BENCHMARK_NAME) $(REDIS_CHECK_RDB_NAME) $(REDIS_CHECK_AOF_NAME)
+all: libconcurrent-queue $(REDIS_SERVER_NAME) $(REDIS_SENTINEL_NAME) $(REDIS_CLI_NAME) $(REDIS_BENCHMARK_NAME) $(REDIS_CHECK_RDB_NAME) $(REDIS_CHECK_AOF_NAME)
 	@echo ""
 	@echo "Hint: It's a good idea to run 'make test' ;)"
 	@echo ""
@@ -329,7 +329,7 @@ endif
 
 # redis-server
 $(REDIS_SERVER_NAME): $(REDIS_SERVER_OBJ)
-	$(REDIS_LD) -o $@ $^ ../deps/hiredis/libhiredis.a ../deps/lua/src/liblua.a $(FINAL_LIBS)
+	$(REDIS_LD) -o $@ $^ ../deps/hiredis/libhiredis.a ../deps/lua/src/liblua.a -L. -lconcurrent-queue -Wl,-R$(CURDIR) $(FINAL_LIBS)
 
 # redis-sentinel
 $(REDIS_SENTINEL_NAME): $(REDIS_SERVER_NAME)
@@ -366,6 +366,8 @@ DEP = $(REDIS_SERVER_OBJ:%.o=%.d) $(REDIS_CLI_OBJ:%.o=%.d) $(REDIS_BENCHMARK_OBJ
 clean:
 	rm -rf $(REDIS_SERVER_NAME) $(REDIS_SENTINEL_NAME) $(REDIS_CLI_NAME) $(REDIS_BENCHMARK_NAME) $(REDIS_CHECK_RDB_NAME) $(REDIS_CHECK_AOF_NAME) *.o *.gcda *.gcno *.gcov redis.info lcov-html Makefile.dep dict-benchmark
 	rm -f $(DEP)
+	rm -f libconcurrent-queue.so
+	rm -f concurrent-queue-test concurrent-queue-test.o
 
 .PHONY: clean
 
@@ -426,3 +428,19 @@ install: all
 
 uninstall:
 	rm -f $(INSTALL_BIN)/{$(REDIS_SERVER_NAME),$(REDIS_BENCHMARK_NAME),$(REDIS_CLI_NAME),$(REDIS_CHECK_RDB_NAME),$(REDIS_CHECK_AOF_NAME),$(REDIS_SENTINEL_NAME)}
+
+SCAL_BASE_PATH=../deps/scal
+SCAL_INC_PATHS=-I$(SCAL_BASE_PATH) -I$(SCAL_BASE_PATH)/src
+SCAL_LIB_PATHS=-L$(SCAL_BASE_PATH)/out/Release/obj.target
+SCAL_CXX_FLAGS=-O2 -Wall -Werror -ffast-math -fPIC -g -ggdb
+SCAL_LIBS=-lscal -lpthread -lgflags
+
+scal:
+	./build-scal.sh $(SCAL_BASE_PATH)
+
+libconcurrent-queue:
+	g++ $(SCAL_CXX_FLAGS) $(SCAL_INC_PATHS) -c concurrent-queue.cpp -o concurrent-queue.o
+	g++ $(SCAL_CXX_FLAGS) concurrent-queue.o $(SCAL_LIB_PATHS) $(SCAL_LIBS) -shared -o libconcurrent-queue.so
+
+concurrent-queue-test: libconcurrent-queue
+	$(REDIS_CC) $(FINAL_CFLAGS) $(SCAL_INC_PATHS) concurrent-queue-test.c -L. -lconcurrent-queue -Wl,-R$(CURDIR) -o concurrent-queue-test
