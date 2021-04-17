@@ -76,6 +76,9 @@ double R_Zero, R_PosInf, R_NegInf, R_Nan;
 
 /*================================= Globals ================================= */
 
+/* Concurrent Queue Type */
+enum QueueType conqueueType;
+
 /* Global vars */
 struct redisServer server; /* Server global state */
 
@@ -3189,7 +3192,7 @@ void initServer(void) {
     server.blocked_last_cron = 0;
     server.blocking_op_nesting = 0;
 
-    server.client_queue = conqueueCreate(LOCK_BASED_SINGLY_LINKED_LIST_QUEUE);
+    server.client_queue = conqueueCreate(conqueueType);
 
     if ((server.tls_port || server.tls_replication || server.tls_cluster)
                 && tlsConfigure(&server.tls_ctx_config) == C_ERR) {
@@ -6055,7 +6058,37 @@ int iAmMaster(void) {
             (server.cluster_enabled && nodeIsMaster(server.cluster->myself)));
 }
 
+#define LBSLL_QUEUE_STR "lbsll"
+#define MS_QUEUE_STR "ms"
+#define TS_QUEUE_STR "ts"
+#define LLK_QUEUE_STR "llk"
+
 int main(int argc, char **argv) {
+    if (argc <= 1) {
+        // See concurrent-queue.h for more info on valid queue types
+        fprintf(stderr, "USAGE: %s QUEUE_TYPE ...\n", argv[0]);
+        fprintf(stderr, "Queue Types: %s, %s, %s, %s\n",
+                LBSLL_QUEUE_STR, MS_QUEUE_STR, TS_QUEUE_STR, LLK_QUEUE_STR);
+        exit(-1);
+    }
+
+    const char *const conqueueTypeStr = argv[1];
+    if (0 == strcmp(conqueueTypeStr, LBSLL_QUEUE_STR)) {
+        conqueueType = LOCK_BASED_SINGLY_LINKED_LIST_QUEUE;
+    } else if (0 == strcmp(conqueueTypeStr, MS_QUEUE_STR)) {
+        conqueueType = MS_QUEUE;
+    } else if (0 == strcmp(conqueueTypeStr, TS_QUEUE_STR)) {
+        conqueueType = TIMESTAMPED_QUEUE;
+    } else if (0 == strcmp(conqueueTypeStr, LLK_QUEUE_STR)) {
+        conqueueType = LOCALLY_LINEARIZABLE_K_QUEUE;
+    } else {
+        fprintf(stderr, "Unrecognized queue type: %s\n", conqueueTypeStr);
+        exit(-1);
+    }
+
+    argv += 1;
+    argc -= 1;
+
     struct timeval tv;
     int j;
     char config_from_stdin = 0;
@@ -6207,7 +6240,8 @@ int main(int argc, char **argv) {
     int background = server.daemonize && !server.supervised;
     if (background) daemonize();
 
-    printf("=== %d IO THREADS\n", server.io_threads_num);
+    printf("=== %d IO THREADS\n", server.io_threads_num - 1);
+    printf("=== CONCURRENT QUEUE TYPE %d\n", (int)conqueueType);
     initConcurrency(server.io_threads_num);
     initThreadConcurrency();
 
