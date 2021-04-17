@@ -3189,8 +3189,7 @@ void initServer(void) {
     server.blocked_last_cron = 0;
     server.blocking_op_nesting = 0;
 
-    server.client_queue = listCreate();
-    assert(0 == pthread_spin_init(&server.client_queue_mutex, PTHREAD_PROCESS_PRIVATE));
+    server.client_queue = conqueueCreate(LOCK_BASED_SINGLY_LINKED_LIST_QUEUE);
 
     if ((server.tls_port || server.tls_replication || server.tls_cluster)
                 && tlsConfigure(&server.tls_ctx_config) == C_ERR) {
@@ -6207,6 +6206,8 @@ int main(int argc, char **argv) {
     server.supervised = redisIsSupervised(server.supervised_mode);
     int background = server.daemonize && !server.supervised;
     if (background) daemonize();
+
+    initConcurrency(server.io_threads_num);
 
     serverLog(LL_WARNING, "oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo");
     serverLog(LL_WARNING,

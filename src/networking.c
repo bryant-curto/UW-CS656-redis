@@ -31,6 +31,7 @@
 #include "atomicvar.h"
 #include "cluster.h"
 #include "my-defs.h"
+#include "concurrent-queue.h"
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <math.h>
@@ -221,9 +222,7 @@ void clientInstallWriteHandler(client *c) {
          * a system call. We'll only really install the write handler if
          * we'll not be able to write the whole reply at once. */
         c->flags |= CLIENT_PENDING_WRITE;
-        assert(0 == pthread_spin_lock(&server.client_queue_mutex));
-        listAddNodeTail(server.client_queue, c);
-        assert(0 == pthread_spin_unlock(&server.client_queue_mutex));
+        assert(0 == conqueueEnqueue(server.client_queue, (void *)c));
     }
 }
 
@@ -1260,12 +1259,10 @@ void unlinkClient(client *c) {
 
     /* Remove from the list of pending writes if needed. */
     if (c->flags & CLIENT_PENDING_WRITE) {
-        assert(0 == pthread_spin_lock(&server.client_queue_mutex));
-        ln = listSearchKey(server.client_queue,c);
-        if (NULL != ln) {
-            listDelNode(server.client_queue,ln);
-        }
-        assert(0 == pthread_spin_unlock(&server.client_queue_mutex));
+        // Mark as deleted instructing possible IO threads encountering
+        // it to ignore it. This is safe since client's don't actually
+        // get freed. TODO
+        c->flags &= ~CLIENT_KILLED;
         c->flags &= ~CLIENT_PENDING_WRITE;
     }
 
@@ -1621,17 +1618,12 @@ int handleClientsWithPendingWrites(void) {
     // This should only be executed when there's no IO threads
     assert(1 == server.io_threads_num);
 
-    listIter li;
-    listNode *ln;
-    assert(0 == pthread_spin_lock(&server.client_queue_mutex));
-    int processed = listLength(server.client_queue);
+    int processed = 0; // TODO: server stats need to be fixed
 
-    listRewind(server.client_queue,&li);
-    while((ln = listNext(&li))) {
-        client *c = listNodeValue(ln);
+    client *c;
+    while(0 == conqueueDequeue(server.client_queue, (void **)&c)) {
         acquireClient(c);
         c->flags &= ~CLIENT_PENDING_WRITE;
-        listDelNode(server.client_queue,ln);
 
         /* If a client is protected, don't do anything,
          * that may trigger write error or recreate handler. */
@@ -1672,7 +1664,6 @@ int handleClientsWithPendingWrites(void) {
         }
         releaseClient(c);
     }
-    assert(0 == pthread_spin_unlock(&server.client_queue_mutex));
     return processed;
 }
 
@@ -3481,34 +3472,28 @@ void *IOThreadMain(void *myid) {
     while(1) {
         client *c;
         /* Wait for start */
+        int rval = -1;
         for (int j = 0; j < 1000000; j++) {
-            c = NULL;
-            pthread_spin_lock(&server.client_queue_mutex);
-            if (listLength(server.client_queue) > 0) {
-                listIter li;
-                listRewind(server.client_queue,&li);
-                listNode *ln = listNext(&li);
-                c = listNodeValue(ln);
-                listDelNode(server.client_queue, ln);
-                pthread_spin_unlock(&server.client_queue_mutex);
+            if (0 == (rval = conqueueDequeue(server.client_queue, (void **)&c))) {
                 break;
             }
-            pthread_spin_unlock(&server.client_queue_mutex);
         }
 
         /* Give the main thread a chance to stop this thread. */
-        if (NULL == c) {
+        if (0 != rval) {
             pthread_mutex_lock(&io_threads_mutex[id]);
             pthread_mutex_unlock(&io_threads_mutex[id]);
             continue;
         }
 
         acquireClient(c);
-        assert(c->flags & CLIENT_PENDING_WRITE);
-        c->flags &= ~CLIENT_PENDING_WRITE;
-        do {
-            writeToClient(c,0);
-        } while (clientHasPendingReplies(c));
+        if (!(c->flags & CLIENT_KILLED)) {
+            assert(c->flags & CLIENT_PENDING_WRITE);
+            c->flags &= ~CLIENT_PENDING_WRITE;
+            do {
+                writeToClient(c,0);
+            } while (clientHasPendingReplies(c));
+        }
         releaseClient(c);
     }
 }

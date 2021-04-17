@@ -35,6 +35,7 @@
 #include "solarisfixes.h"
 #include "rio.h"
 #include "atomicvar.h"
+#include "concurrent-queue.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -274,6 +275,7 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
                                            and AOF client */
 #define CLIENT_REPL_RDBONLY (1ULL<<42) /* This client is a replica that only wants
                                           RDB without replication buffer. */
+#define CLIENT_KILLED (1ULL<<43)
 
 /* Client block type (btype field in client structure)
  * if CLIENT_BLOCKED flag is set. */
@@ -1617,8 +1619,7 @@ struct redisServer {
     int target_replica_port; /* Failover target port */
     int failover_state; /* Failover state */
 
-    list *client_queue;
-    pthread_spinlock_t client_queue_mutex;
+    ConcurrentQueue *client_queue;
 };
 
 #define MAX_KEYS_BUFFER 256
