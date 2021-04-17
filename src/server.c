@@ -6209,6 +6209,7 @@ int main(int argc, char **argv) {
 
     printf("=== %d IO THREADS\n", server.io_threads_num);
     initConcurrency(server.io_threads_num);
+    initThreadConcurrency();
 
     serverLog(LL_WARNING, "oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo");
     serverLog(LL_WARNING,

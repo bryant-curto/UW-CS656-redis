@@ -21,6 +21,7 @@ enum QueueType {
 };
 
 void initConcurrency(size_t numThreads);
+void initThreadConcurrency(void);
 
 ConcurrentQueue *conqueueCreate(enum QueueType type);
 

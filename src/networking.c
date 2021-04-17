@@ -3468,6 +3468,7 @@ void *IOThreadMain(void *myid) {
     redis_set_thread_title(thdname);
     redisSetCpuAffinity(server.server_cpulist);
     makeThreadKillable();
+    initThreadConcurrency();
 
     while(1) {
         client *c;

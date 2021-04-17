@@ -10,7 +10,8 @@
 #include <datastructures/ts_queue_buffer.h>
 
 static bool initialized = false;
-static uint64_t numThreads = 1;
+static thread_local bool initializedThread = false;
+static uint64_t numThreads;
 
 struct ConcurrentQueue {
 	template <typename T>
@@ -23,24 +24,40 @@ struct ConcurrentQueue {
 	const QueueType type;
 };
 
-void initConcurrency(uint64_t numThreads) {
-	// Ripped from scal/src/benchmark/prodcon/prodcon.cc
-	size_t tlsize = scal::HumanSizeToPages("1g", 2);
+static inline void validateInitialized(bool thread, bool invert) {
+	if (!(invert ^ (thread ? initializedThread : initialized))) {
+		fprintf(stderr, "%s state %s initialized!\n", (thread ? "Thread" : "Global"), (invert ? "already" : "not"));
+		assert(false);
+		exit(-1);
+	}
+}
 
-	scal::ThreadLocalAllocator::Get().Init(tlsize, true);
-	//threadlocals_init();
+static inline void validateGlobalInitialized(bool invert=false) {
+	validateInitialized(false /*thread*/, invert);
+}
+
+static inline void validateThreadInitialized(bool invert=false) {
+	validateInitialized(true /*thread*/, invert);
+}
+
+void initConcurrency(uint64_t numThreads) {
+	validateGlobalInitialized(true /*invert*/);
+
 	scal::ThreadContext::prepare(numThreads + 1);
 	scal::ThreadContext::assign_context();
-
 	initialized = true;
 	::numThreads = numThreads;
 }
 
-static inline void validateInitialized() {
-	if (!initialized) {
-		perror("Not initialized!\n");
-		exit(-1);
-	}
+void initThreadConcurrency(void) {
+	validateGlobalInitialized();
+	validateThreadInitialized(true /*invert*/);
+
+	// Ripped from scal/src/benchmark/prodcon/prodcon.cc
+	size_t tlsize = scal::HumanSizeToPages("1G", 2 /* lenth of string */);
+	scal::ThreadLocalAllocator::Get().Init(tlsize, true);
+
+	initializedThread = true;
 }
 
 using MyLockBasedQueue = LockBasedQueue<void *>;
@@ -50,8 +67,6 @@ using MyUnboundedSizeKFifo = scal::UnboundedSizeKFifo<void *>;
 
 
 ConcurrentQueue *createMyLockBasedQueue(void) {
-	validateInitialized();
-
 	// https://github.com/cksystemsgroup/scal/blob/fa2208a97a77d65f4e90f85fef3404c27c1f2ac2/src/datastructures/lockbased_queue.h
 	auto queue = new MyLockBasedQueue(0 /* use default dequeuing strategy */,
 									  0 /* don't delay if no element to dequeue */);
@@ -59,24 +74,18 @@ ConcurrentQueue *createMyLockBasedQueue(void) {
 }
 
 ConcurrentQueue *createMyMSQueue(void) {
-	validateInitialized();
-
 	// https://github.com/cksystemsgroup/scal/blob/fa2208a97a77d65f4e90f85fef3404c27c1f2ac2/src/datastructures/ms_queue.h
 	auto queue = new MyMSQueue();
 	return new ConcurrentQueue(queue, MS_QUEUE);
 }
 
 ConcurrentQueue *createMyTSQueue(void) {
-	validateInitialized();
-
 	// https://github.com/cksystemsgroup/scal/blob/fa2208a97a77d65f4e90f85fef3404c27c1f2ac2/src/datastructures/ts_queue.h
 	auto queue = new MyTSQueue(numThreads, 0 /* don't wait if no element to dequeue */);
 	return new ConcurrentQueue(queue, TIMESTAMPED_QUEUE);
 }
 
 ConcurrentQueue *createMyUnboundedSizeKFifo(void) {
-	validateInitialized();
-
 	// https://github.com/cksystemsgroup/scal/blob/fa2208a97a77d65f4e90f85fef3404c27c1f2ac2/src/datastructures/unboundedsize_kfifo.h
 	auto queue = new MyUnboundedSizeKFifo(numThreads);
 	return new ConcurrentQueue(queue, MS_QUEUE);
@@ -113,11 +122,16 @@ ConcurrentQueue *createMyUnboundedSizeKFifo(void) {
 
 #define CREATE(type) { return create##type(); }
 ConcurrentQueue *conqueueCreate(QueueType type) {
+	validateGlobalInitialized();
+	validateThreadInitialized();
+
 	MATCH_APPLY(CREATE, type);
 }
 
 #define DELETE(queue_ptr) { delete queue_ptr; }
 void conqueueDestroy(ConcurrentQueue *queue) {
+	validateGlobalInitialized();
+	validateThreadInitialized();
 	QUEUE_MATCH_APPLY(DELETE, queue);
 	delete queue;
 }
@@ -125,11 +139,17 @@ void conqueueDestroy(ConcurrentQueue *queue) {
 #define ENQUEUE(queue_ptr) \
 	{ return (queue_ptr->enqueue(item) ? 0 : -1); }
 int conqueueEnqueue(ConcurrentQueue *queue, void *item) {
+#ifdef MY_DEBUG
+	validateThreadInitialized();
+#endif
 	QUEUE_MATCH_APPLY(ENQUEUE, queue);
 }
 
 #define DEQUEUE(queue_ptr) \
 	{ return (queue_ptr->dequeue(item) ? 0 : -1); }
 int conqueueDequeue(ConcurrentQueue *queue, void **item) {
+#ifdef MY_DEBUG
+	validateThreadInitialized();
+#endif
 	QUEUE_MATCH_APPLY(DEQUEUE, queue);
 }
