@@ -6207,6 +6207,7 @@ int main(int argc, char **argv) {
     int background = server.daemonize && !server.supervised;
     if (background) daemonize();
 
+    printf("=== %d IO THREADS\n", server.io_threads_num);
     initConcurrency(server.io_threads_num);
 
     serverLog(LL_WARNING, "oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo");
