@@ -88,6 +88,10 @@ static struct config {
     int numclients;
     redisAtomic int liveclients;
     int requests;
+    int duration_ms;
+    int duration_expired;
+    int startup_ms;
+    int startup_expired;
     redisAtomic int requests_issued;
     redisAtomic int requests_finished;
     redisAtomic int previous_requests_finished;
@@ -205,8 +209,11 @@ static redisContext *getRedisContext(const char *ip, int port,
 static void freeRedisConfig(redisConfig *cfg);
 static int fetchClusterSlotsConfiguration(client c);
 static void updateClusterSlotsConfiguration();
+int isDone(struct aeEventLoop *eventLoop, long long id, void *clientData);
 int showThroughput(struct aeEventLoop *eventLoop, long long id,
                    void *clientData);
+int expireStartup(struct aeEventLoop *eventLoop, long long id, void *clientData);
+int expireDuration(struct aeEventLoop *eventLoop, long long id, void *clientData);
 
 static sds benchmarkVersion(void) {
     sds version;
@@ -385,8 +392,10 @@ static void freeClient(client c) {
     aeDeleteFileEvent(el,c->context->fd,AE_READABLE);
     if (c->thread_id >= 0) {
         int requests_finished = 0;
+        int duration_expired;
         atomicGet(config.requests_finished, requests_finished);
-        if (requests_finished >= config.requests) {
+        atomicGet(config.duration_expired, duration_expired);
+        if (duration_expired || requests_finished >= config.requests) {
             aeStop(el);
         }
     }
@@ -468,8 +477,10 @@ static void setClusterKeyHashTag(client c) {
 
 static void clientDone(client c) {
     int requests_finished = 0;
+    int duration_expired;
     atomicGet(config.requests_finished, requests_finished);
-    if (requests_finished >= config.requests) {
+    atomicGet(config.duration_expired, duration_expired);
+    if (duration_expired || requests_finished >= config.requests) {
         freeClient(c);
         if (!config.num_threads && config.el) aeStop(config.el);
         return;
@@ -575,8 +586,10 @@ static void readHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
                     continue;
                 }
                 int requests_finished = 0;
+                int startup_expired;
                 atomicGetIncr(config.requests_finished, requests_finished, 1);
-                if (requests_finished < config.requests){
+                atomicGet(config.startup_expired, startup_expired);
+                if (startup_expired && requests_finished < config.requests){
                         if (config.num_threads == 0) {
                             hdr_record_value(
                             config.latency_histogram,  // Histogram to record to
@@ -615,8 +628,10 @@ static void writeHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     if (c->written == 0) {
         /* Enforce upper bound to number of requests. */
         int requests_issued = 0;
+        int duration_expired;
         atomicGetIncr(config.requests_issued, requests_issued, config.pipeline);
-        if (requests_issued >= config.requests) {
+        atomicGet(config.duration_expired, duration_expired);
+        if (duration_expired || requests_issued >= config.requests) {
             return;
         }
 
@@ -1025,7 +1040,16 @@ static benchmarkThread *createBenchmarkThread(int index) {
     if (thread == NULL) return NULL;
     thread->index = index;
     thread->el = aeCreateEventLoop(1024*10);
-    aeCreateTimeEvent(thread->el,1,showThroughput,NULL,NULL);
+    aeCreateTimeEvent(thread->el,1,isDone,NULL,NULL);
+    if (0 == index) {
+        aeCreateTimeEvent(thread->el,1,showThroughput,NULL,NULL);
+        if (config.startup_ms > 0) {
+            aeCreateTimeEvent(thread->el,config.startup_ms,expireStartup,NULL,NULL);
+        }
+        if (config.duration_ms > 0) {
+            aeCreateTimeEvent(thread->el,config.duration_ms + 1,expireDuration,NULL,NULL);
+        }
+    }
     return thread;
 }
 
@@ -1410,6 +1434,8 @@ int parseOptions(int argc, const char **argv) {
     int lastarg;
     int exit_status = 1;
 
+    int requests_set = 0, duration_set = 0;
+
     for (i = 1; i < argc; i++) {
         lastarg = (i == (argc-1));
 
@@ -1424,6 +1450,18 @@ int parseOptions(int argc, const char **argv) {
         } else if (!strcmp(argv[i],"-n")) {
             if (lastarg) goto invalid;
             config.requests = atoi(argv[++i]);
+            requests_set = 1;
+
+        } else if (!strcmp(argv[i],"--startup")) {
+            if (lastarg) goto invalid;
+            config.startup_ms = atoi(argv[++i]);
+            config.startup_expired = 0;
+        } else if (!strcmp(argv[i],"--duration")) {
+            if (lastarg) goto invalid;
+            config.duration_ms = atoi(argv[++i]);
+            config.duration_expired = 0;
+            duration_set = 1;
+
         } else if (!strcmp(argv[i],"-k")) {
             if (lastarg) goto invalid;
             config.keepalive = atoi(argv[++i]);
@@ -1545,6 +1583,17 @@ int parseOptions(int argc, const char **argv) {
         }
     }
 
+    if (duration_set && !requests_set) {
+        config.requests = INT_MAX - 1;
+    }
+
+    if (config.startup_ms > 0) {
+        aeCreateTimeEvent(config.el,config.startup_ms,expireStartup,NULL,NULL);
+    }
+    if (config.duration_ms > 0) {
+        aeCreateTimeEvent(config.el,config.duration_ms + 1,expireDuration,NULL,NULL);
+    }
+
     return i;
 
 invalid:
@@ -1560,6 +1609,8 @@ usage:
 " --user <username>  Used to send ACL style 'AUTH username pass'. Needs -a.\n"
 " -c <clients>       Number of parallel connections (default 50)\n"
 " -n <requests>      Total number of requests (default 100000)\n"
+" --startup <ms>     Millisecond delay before collecting latency measures\n"
+" --duration <ms>    Millisecond duration during which test is run\n"
 " -d <size>          Data size of SET/GET value in bytes (default 3)\n"
 " --dbnum <db>       SELECT the specified db number (default 0)\n"
 " --threads <num>    Enable multi-thread mode.\n"
@@ -1623,6 +1674,27 @@ usage:
     );
     exit(exit_status);
 }
+int isDone(struct aeEventLoop *eventLoop, long long id, void *clientData) {
+    UNUSED(eventLoop);
+    UNUSED(id);
+    UNUSED(clientData);
+    int liveclients = 0;
+    int requests_finished = 0;
+    int duration_expired = 0;
+    atomicGet(config.liveclients, liveclients);
+    atomicGet(config.requests_finished, requests_finished);
+    atomicGet(config.duration_expired, duration_expired);
+
+    if (liveclients == 0 && (duration_expired || requests_finished != config.requests)) {
+        fprintf(stderr,"All clients disconnected... aborting.\n");
+        exit(1);
+    }
+    if (config.num_threads && (duration_expired || requests_finished >= config.requests)) {
+        aeStop(eventLoop);
+        return AE_NOMORE;
+    }
+    return 250; /* every 250ms */
+}
 
 int showThroughput(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     UNUSED(eventLoop);
@@ -1631,24 +1703,26 @@ int showThroughput(struct aeEventLoop *eventLoop, long long id, void *clientData
     int liveclients = 0;
     int requests_finished = 0;
     int previous_requests_finished = 0;
+    int duration_expired = 0;
     long long current_tick = mstime();
     atomicGet(config.liveclients, liveclients);
     atomicGet(config.requests_finished, requests_finished);
     atomicGet(config.previous_requests_finished, previous_requests_finished);
+    atomicGet(config.duration_expired, duration_expired);
     
-    if (liveclients == 0 && requests_finished != config.requests) {
+    if (liveclients == 0 && (duration_expired || requests_finished != config.requests)) {
         fprintf(stderr,"All clients disconnected... aborting.\n");
         exit(1);
     }
-    if (config.num_threads && requests_finished >= config.requests) {
+    if (config.num_threads && (duration_expired || requests_finished >= config.requests)) {
         aeStop(eventLoop);
         return AE_NOMORE;
     }
-    if (config.csv) return 250;
+    if (config.csv) return 1000;
     if (config.idlemode == 1) {
         printf("clients: %d\r", config.liveclients);
         fflush(stdout);
-	return 250;
+	return 1000;
     }
     const float dt = (float)(current_tick-config.start)/1000.0;
     const float rps = (float)requests_finished/dt;
@@ -1656,10 +1730,32 @@ int showThroughput(struct aeEventLoop *eventLoop, long long id, void *clientData
     const float instantaneous_rps = (float)(requests_finished-previous_requests_finished)/instantaneous_dt;
     config.previous_tick = current_tick;
     atomicSet(config.previous_requests_finished,requests_finished);
-    config.last_printed_bytes = printf("%s: rps=%.1f (overall: %.1f) avg_msec=%.3f (overall: %.3f)\r", config.title, instantaneous_rps, rps, hdr_mean(config.current_sec_latency_histogram)/1000.0f, hdr_mean(config.latency_histogram)/1000.0f);
+    config.last_printed_bytes =
+			printf("%s %lld: rps=%.1f (overall: %.1f) avg_msec=%.3f (overall: %.3f)\n",
+				   config.title, current_tick / 1000, instantaneous_rps, rps,
+				   hdr_mean(config.current_sec_latency_histogram)/1000.0f,
+				   hdr_mean(config.latency_histogram)/1000.0f);
     hdr_reset(config.current_sec_latency_histogram);
     fflush(stdout);
-    return 250; /* every 250ms */
+    return 1000; /* every 1000ms */
+}
+
+int expireStartup(struct aeEventLoop *eventLoop, long long id, void *clientData) {
+    UNUSED(eventLoop);
+    UNUSED(id);
+    UNUSED(clientData);
+    atomicSet(config.startup_expired, 1);
+    printf("Expiring startup\n"); fflush(stdout);
+    return AE_NOMORE;
+}
+
+int expireDuration(struct aeEventLoop *eventLoop, long long id, void *clientData) {
+    UNUSED(eventLoop);
+    UNUSED(id);
+    UNUSED(clientData);
+    atomicSet(config.duration_expired, 1);
+    printf("Expiring duration\n"); fflush(stdout);
+    return AE_NOMORE;
 }
 
 /* Return true if the named test was selected using the -t command line
@@ -1691,8 +1787,13 @@ int main(int argc, const char **argv) {
     memset(&config.sslconfig, 0, sizeof(config.sslconfig));
     config.numclients = 50;
     config.requests = 100000;
+    config.duration_ms = -1;
+    config.duration_expired = 0;
+    config.startup_ms = 0;
+    config.startup_expired = 1;
     config.liveclients = 0;
     config.el = aeCreateEventLoop(1024*10);
+    aeCreateTimeEvent(config.el,1,isDone,NULL,NULL);
     aeCreateTimeEvent(config.el,1,showThroughput,NULL,NULL);
     config.keepalive = 1;
     config.datasize = 3;
