@@ -92,6 +92,7 @@ static struct config {
     int duration_expired;
     int startup_ms;
     int startup_expired;
+    ssize_t strlen_assert;
     redisAtomic int requests_issued;
     redisAtomic int requests_finished;
     redisAtomic int previous_requests_finished;
@@ -563,6 +564,20 @@ static void readHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
                     if (do_wait) sleep(1);
                     if (fetch_slots && !fetchClusterSlotsConfiguration(c))
                         exit(1);
+                }
+
+                if (config.strlen_assert >= 0) {
+                    if (REDIS_REPLY_STRING != r->type) {
+                        fprintf(stderr, "Redis reply is not a string (type: %d)!\n", r->type);
+                        exit(1);
+                    } else if ((size_t)config.strlen_assert != r->len) {
+                        fprintf(stderr, "Redis reply failed strlen assert\n"
+                                    "  len: %zu\n"
+                                    "  expected: %zu\n"
+                                    "  string: %s\n",
+                                    r->len, (size_t)config.strlen_assert, r->str);
+                        exit(1);
+                    }
                 }
 
                 freeReplyObject(reply);
@@ -1047,7 +1062,7 @@ static benchmarkThread *createBenchmarkThread(int index) {
             aeCreateTimeEvent(thread->el,config.startup_ms,expireStartup,NULL,NULL);
         }
         if (config.duration_ms > 0) {
-            aeCreateTimeEvent(thread->el,config.duration_ms + 1,expireDuration,NULL,NULL);
+            aeCreateTimeEvent(thread->el,config.duration_ms + 1000,expireDuration,NULL,NULL);
         }
     }
     return thread;
@@ -1461,6 +1476,9 @@ int parseOptions(int argc, const char **argv) {
             config.duration_ms = atoi(argv[++i]);
             config.duration_expired = 0;
             duration_set = 1;
+        } else if (!strcmp(argv[i],"--strlen_assert")) {
+            if (lastarg) goto invalid;
+            config.strlen_assert = (ssize_t)atoll(argv[++i]);
 
         } else if (!strcmp(argv[i],"-k")) {
             if (lastarg) goto invalid;
@@ -1611,6 +1629,7 @@ usage:
 " -n <requests>      Total number of requests (default 100000)\n"
 " --startup <ms>     Millisecond delay before collecting latency measures\n"
 " --duration <ms>    Millisecond duration during which test is run\n"
+" --strlen_assert <len> Expected string length of reply\n"
 " -d <size>          Data size of SET/GET value in bytes (default 3)\n"
 " --dbnum <db>       SELECT the specified db number (default 0)\n"
 " --threads <num>    Enable multi-thread mode.\n"
@@ -1791,6 +1810,7 @@ int main(int argc, const char **argv) {
     config.duration_expired = 0;
     config.startup_ms = 0;
     config.startup_expired = 1;
+    config.strlen_assert = -1;
     config.liveclients = 0;
     config.el = aeCreateEventLoop(1024*10);
     aeCreateTimeEvent(config.el,1,isDone,NULL,NULL);
