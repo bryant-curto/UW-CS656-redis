@@ -7,6 +7,7 @@
 
 int main() {
 	initConcurrency(1);
+	initThreadConcurrency();
 
 	for (int type = (int)__MIN; type <= (int)__MAX; type++) {
 		printf("Testing Queue Type %d\n", type);

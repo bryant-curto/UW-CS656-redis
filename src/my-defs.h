@@ -33,10 +33,14 @@ static inline void acquireClient(client *c) {
 	}
 	myprintf("Thread %lu acquired client %p (%u)\n", (unsigned long)pthread_self(), (void *)c, lock_depth);
 
+	/*
+	// This can happen. The caller just needs to be sure to check for this condition.
+	// For now, it should be fine to just check before reading or writing to the client.
 	if (c->is_deleted) {
 		fprintf(stderr, "Lock acquired on deleted client!\n");
 		exit(-1);
 	}
+	*/
 }
 
 static inline void releaseClient(client *c) {

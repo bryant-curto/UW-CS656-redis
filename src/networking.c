@@ -2157,6 +2157,10 @@ void processInputBuffer(client *c) {
 void readQueryFromClient(connection *conn) {
     client *c = connGetPrivateData(conn);
     acquireClient(c);
+    if (c->flags & CLIENT_KILLED || c->is_deleted) {
+        releaseClient(c);
+        return;
+    }
     int nread, readlen;
     size_t qblen;
 
@@ -3488,7 +3492,7 @@ void *IOThreadMain(void *myid) {
         }
 
         acquireClient(c);
-        if (!(c->flags & CLIENT_KILLED)) {
+        if (!(c->flags & CLIENT_KILLED) && !c->is_deleted) {
             assert(c->flags & CLIENT_PENDING_WRITE);
             c->flags &= ~CLIENT_PENDING_WRITE;
             do {
