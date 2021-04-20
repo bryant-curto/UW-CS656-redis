@@ -6058,29 +6058,28 @@ int iAmMaster(void) {
             (server.cluster_enabled && nodeIsMaster(server.cluster->myself)));
 }
 
-#define LBSLL_QUEUE_STR "lbsll"
-#define MS_QUEUE_STR "ms"
-#define TS_QUEUE_STR "ts"
-#define LLK_QUEUE_STR "llk"
+#define LOCK_BASED_SINGLY_LINKED_LIST_QUEUE_STR "lbsll"
+#define MICHAEL_SCOTT_QUEUE_STR "ms"
+#define BRR_DISTRIBUTED_QUEUE_STR "brrd"
 
 int main(int argc, char **argv) {
     if (argc <= 1) {
         // See concurrent-queue.h for more info on valid queue types
         fprintf(stderr, "USAGE: %s QUEUE_TYPE ...\n", argv[0]);
-        fprintf(stderr, "Queue Types: %s, %s, %s, %s\n",
-                LBSLL_QUEUE_STR, MS_QUEUE_STR, TS_QUEUE_STR, LLK_QUEUE_STR);
+        fprintf(stderr, "Queue Types: %s, %s, %s\n",
+                LOCK_BASED_SINGLY_LINKED_LIST_QUEUE_STR,
+                MICHAEL_SCOTT_QUEUE_STR,
+                BRR_DISTRIBUTED_QUEUE_STR);
         exit(-1);
     }
 
     const char *const conqueueTypeStr = argv[1];
-    if (0 == strcmp(conqueueTypeStr, LBSLL_QUEUE_STR)) {
+    if (0 == strcmp(conqueueTypeStr, LOCK_BASED_SINGLY_LINKED_LIST_QUEUE_STR)) {
         conqueueType = LOCK_BASED_SINGLY_LINKED_LIST_QUEUE;
-    } else if (0 == strcmp(conqueueTypeStr, MS_QUEUE_STR)) {
-        conqueueType = MS_QUEUE;
-    } else if (0 == strcmp(conqueueTypeStr, TS_QUEUE_STR)) {
-        conqueueType = TIMESTAMPED_QUEUE;
-    } else if (0 == strcmp(conqueueTypeStr, LLK_QUEUE_STR)) {
-        conqueueType = LOCALLY_LINEARIZABLE_K_QUEUE;
+    } else if (0 == strcmp(conqueueTypeStr, MICHAEL_SCOTT_QUEUE_STR)) {
+        conqueueType = MICHAEL_SCOTT_QUEUE;
+    } else if (0 == strcmp(conqueueTypeStr, BRR_DISTRIBUTED_QUEUE_STR)) {
+        conqueueType = BRR_DISTRIBUTED_QUEUE;
     } else {
         fprintf(stderr, "Unrecognized queue type: %s\n", conqueueTypeStr);
         exit(-1);

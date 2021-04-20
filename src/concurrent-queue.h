@@ -11,13 +11,17 @@ typedef struct ConcurrentQueue ConcurrentQueue;
 
 enum QueueType {
 	__MIN = 0,
-	LOCK_BASED_SINGLY_LINKED_LIST_QUEUE = 0,
-	MS_QUEUE = 1,
-	TIMESTAMPED_QUEUE = 2,
+	MICHAEL_SCOTT_QUEUE = 0,
+	BRR_DISTRIBUTED_QUEUE = 1,
+	LOCK_BASED_SINGLY_LINKED_LIST_QUEUE = 2,
+	TIMESTAMPED_QUEUE = 3,
+	LOCALLY_LINEARIZABLE_K_QUEUE = 4,
+	__MAX = 4,
 
-	// Relaxed Queues
-	LOCALLY_LINEARIZABLE_K_QUEUE = 3,
-	__MAX = 3
+	// Not implemented
+	WAITFREE_QUEUE = 5,
+	RANDOM_DEQUEUE_QUEUE = 6,
+	SEGMENT_QUEUE = 7
 };
 
 void initConcurrency(size_t numThreads);
