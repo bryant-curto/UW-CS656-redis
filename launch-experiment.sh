@@ -17,7 +17,7 @@ REQUIRED_SERVER_FLAGS=""
 REQUIRED_BENCHMARK_FLAGS="-h $REDIS_ADDR"
 REQUIRED_CLI_FLAGS="-h $REDIS_ADDR"
 TEST_SERVER_FLAGS=""
-TEST_BENCHMARK_FLAGS="-c 1000 --threads 64 --startup 10000 --duration $TEST_DURATION" #TODO fix number of clients!
+TEST_BENCHMARK_FLAGS="-c 500 --threads 64 --startup 10000 --duration $TEST_DURATION" #TODO fix number of clients!
 SETUP_SERVER_FLAGS="--loglevel warning --io-threads 2" # to avoid test server complaining about not implemented code paths
 
 KEY="key:__rand_int__"
@@ -144,6 +144,77 @@ setup_test() {
 	return 0
 }
 
+setup_test_keyrange() {
+	local server="$1"
+	local test_op="$2"
+	local keyrangesize="$3"
+	local debug_str="$4"
+
+	local server_ssh_pid
+	local rval
+	local key
+	local size
+	local value
+	local res
+
+	# Launch server
+	if ! launch_server "$server $SETUP_CONFIG_FILEPATH $REQUIRED_SERVER_FLAGS $SETUP_SERVER_FLAGS" "$debug_str"; then
+		return -1
+	fi
+	server_ssh_pid=$rval
+
+	# Clear database
+	if ! echo "FLUSHALL SYNC" | $CLI $REQUIRED_CLI_FLAGS; then
+		return -1
+	fi
+
+	if [[ "GET" != "$test_op" ]]; then
+		echo "$test_op op not implemented"
+		return -1
+	fi
+
+	# Set value of key getting retrieved
+	# Key is random string of 0-9,a-z,A-Z of specified length
+	for i in $(seq 0 $(( $keyrangesize - 1))); do
+		size=$(( 2 ** $i ))
+		key="$(printf 'key:%012d' $i)"
+		value="$(cat /dev/urandom | tr -dc '0-9a-zA-Z' | fold -w "$size" | head -n 1)"
+		if [[ 0 != $? ]] || ! echo "SET $key $value" | $CLI $REQUIRED_CLI_FLAGS; then
+			return -1
+		fi
+	done
+
+	# Validate that database entry was correctly set by restarting server and checking key
+	# kill server
+	if ! kill_server "$server_ssh_pid" 15 "$debug_str"; then
+		return -1
+	fi
+
+	# restart server
+	if ! launch_server "$server $TEST_CONFIG_FILEPATH $REQUIRED_SERVER_FLAGS $SETUP_SERVER_FLAGS" "$debug_str"; then
+		return -1
+	fi
+	server_ssh_pid=$rval
+
+	# check that size of value is that expected
+	for i in $(seq 0 $(( $keyrangesize - 1))); do
+		size=$(( 2 ** $i ))
+		key="$(printf 'key:%012d' $i)"
+		res="$(echo "GET $key" | $CLI $REQUIRED_CLI_FLAGS | wc -c)"
+		if [[ 0 != $? ]] || [[ "$res" != "$(( $size + 1 ))" ]]; then
+			echo "Something went wrong with setting up $debug_str server"
+			return -1
+		fi
+	done
+
+	# kill server again
+	if ! kill_server "$server_ssh_pid" 15 "$debug_str"; then
+		return -1
+	fi
+
+	return 0
+}
+
 run_test() {
 	local server="$1"
 	local server_io_threads="$2"
@@ -189,18 +260,116 @@ run_test() {
 	fi
 }
 
+run_test_keyrange() {
+	local server="$1"
+	local server_io_threads="$2"
+	local test_op="$3"
+	local keyrangesize="$4"
+	local debug_str="$5"
+	local test_id="$debug_str"_thr-"$server_io_threads"_op-"$test_op"_keyrangesz-"$keyrangesize"
+
+    if [[ "GET" != $test_op ]]; then
+        echo "$test_op op not supported"
+        return -1
+    fi
+
+	local server_cmd="$server $TEST_CONFIG_FILEPATH --io-threads $server_io_threads $REQUIRED_SERVER_FLAGS $TEST_SERVER_FLAGS"
+	server_cmd="$server_cmd &> $SERVER_OUTPUT_DIR/server-$test_id"
+
+	local benchmark_cmd="$BENCHMARK -t $test_op $REQUIRED_BENCHMARK_FLAGS $TEST_BENCHMARK_FLAGS --strlen_log2keyrange_assert -r $keyrangesize"
+	benchmark_cmd="$benchmark_cmd &> $BENCHMARK_OUTPUT_DIR/benchmark-$test_id"
+
+	local server_ssh_pid
+
+	# Sanity check
+	ssh $REDIS_HOST_ADDR "killall -s 9 redis-server"
+
+	# Launch server
+	if ! launch_server "$server_cmd" "$test_id"; then
+		return -1
+	fi
+	server_ssh_pid=$rval
+
+	local i
+	( sleep 1
+	  for i in $(seq $(( $TEST_DURATION / 1000 )) -1 1); do
+		  printf '%d seconds remaining\r' $i
+		  sleep 1
+	  done
+	  echo '0 seconds remaining' ) &
+
+	# Set value of key getting retrieved
+	echo "Running \"$benchmark_cmd\""
+	if ! eval "$benchmark_cmd"; then
+		return -1
+	fi
+
+	# Kill server
+	if ! kill_server "$server_ssh_pid" 9 "$test_id"; then
+		return -1
+	fi
+}
+
 DEFAULT_QTYPE=ms
 
-for test_op in GET; do
-	for exp in $(seq 3 25); do
-		size=$(( 2 ** $exp ))
+#for test_op in GET; do
+#	for exp in $(seq 3 25); do
+#		size=$(( 2 ** $exp ))
+#
+#		ssh $REDIS_HOST_ADDR "killall -s 9 redis-server"
+#
+#		# Setup servers
+#		echo ">> Starting Server Setup"
+#		if ! setup_test "$BASELINE_SERVER" "$test_op" "$size" "baseline" ||
+#		   ! setup_test "$TEST_SERVER $DEFAULT_QTYPE" "$test_op" "$size" "test"
+#		then
+#			exit -1
+#		fi
+#		echo "<< Server Setup Completed"
+#		echo
+#
+#		for io_threads in 2 4 8 16 32; do
+#			echo "Starting New Test:"
+#			echo "  IO Threads: $io_threads"
+#			echo "  Test Op: $test_op"
+#			echo "  Data Size: $size"
+#			echo
+#
+#			ssh $REDIS_HOST_ADDR "killall -s 9 redis-server"
+#
+#			taskset=
+#			if (( $io_threads <= 8 )); then
+#				taskset="taskset -ac 0-7"
+#			elif (( $io_threads <= 16)); then
+#				taskset="taskset -ac 0-15"
+#			fi
+#
+#			# Run test using baseline server
+#			echo ">> Starting Tests"
+#			if ! run_test "$taskset $BASELINE_SERVER" "$io_threads" "$test_op" "$size" "baseline"; then
+#				exit -1
+#			fi
+#			ssh $REDIS_HOST_ADDR "killall -s 9 redis-server"
+#
+#			for qtype in lbsll ms brrd; do
+#				if ! run_test "$taskset $TEST_SERVER $qtype" "$io_threads" "$test_op" "$size" "test.$qtype"; then
+#					exit -1
+#				fi
+#				ssh $REDIS_HOST_ADDR "killall -s 9 redis-server"
+#			done
+#			echo "<< Tests Completed"
+#		done
+#	done
+#done
 
+for test_op in GET; do
+	for keyrangesize in 26; do
 		ssh $REDIS_HOST_ADDR "killall -s 9 redis-server"
 
 		# Setup servers
 		echo ">> Starting Server Setup"
-		if ! setup_test "$BASELINE_SERVER" "$test_op" "$size" "baseline" ||
-		   ! setup_test "$TEST_SERVER $DEFAULT_QTYPE" "$test_op" "$size" "test"
+		if ! setup_test_keyrange "$BASELINE_SERVER" "$test_op" "$keyrangesize" "baseline" ||
+		   ! setup_test_keyrange "$TEST_SERVER $DEFAULT_QTYPE" "$test_op" "$keyrangesize" "test"
 		then
 			exit -1
 		fi
@@ -211,7 +380,7 @@ for test_op in GET; do
 			echo "Starting New Test:"
 			echo "  IO Threads: $io_threads"
 			echo "  Test Op: $test_op"
-			echo "  Data Size: $size"
+			echo "  Key Range: $keyrangesize"
 			echo
 
 			ssh $REDIS_HOST_ADDR "killall -s 9 redis-server"
@@ -225,13 +394,13 @@ for test_op in GET; do
 
 			# Run test using baseline server
 			echo ">> Starting Tests"
-			if ! run_test "$taskset $BASELINE_SERVER" "$io_threads" "$test_op" "$size" "baseline"; then
+			if ! run_test_keyrange "$taskset $BASELINE_SERVER" "$io_threads" "$test_op" "$keyrangesize" "baseline"; then
 				exit -1
 			fi
 			ssh $REDIS_HOST_ADDR "killall -s 9 redis-server"
 
 			for qtype in lbsll ms brrd; do
-				if ! run_test "$taskset $TEST_SERVER $qtype" "$io_threads" "$test_op" "$size" "test.$qtype"; then
+				if ! run_test_keyrange "$taskset $TEST_SERVER $qtype" "$io_threads" "$test_op" "$keyrangesize" "test.$qtype"; then
 					exit -1
 				fi
 				ssh $REDIS_HOST_ADDR "killall -s 9 redis-server"
