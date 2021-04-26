@@ -93,6 +93,7 @@ static struct config {
     int startup_ms;
     int startup_expired;
     ssize_t strlen_assert;
+    int strlen_log2valrangesize_assert;
     redisAtomic int requests_issued;
     redisAtomic int requests_finished;
     redisAtomic int previous_requests_finished;
@@ -576,6 +577,21 @@ static void readHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
                                     "  expected: %zu\n"
                                     "  string: %s\n",
                                     r->len, (size_t)config.strlen_assert, r->str);
+                        exit(1);
+                    }
+                }
+                if (config.strlen_log2valrangesize_assert > 0) {
+                    if (REDIS_REPLY_STRING != r->type) {
+                        fprintf(stderr, "Redis reply is not a string (type: %d)!\n", r->type);
+                        exit(1);
+                    } else if (((r->len & (r->len - 1)) != 0) || (r->len == 0) ||
+                               (r->len >= 2lu << config.strlen_log2valrangesize_assert))
+                    {
+                        fprintf(stderr, "Redis reply failed log2 keyrange strlen assert\n"
+                                    "  len: %zu\n"
+                                    "  log2valrange: %d\n"
+                                    "  string: %s\n",
+                                    r->len, config.strlen_log2valrangesize_assert, r->str);
                         exit(1);
                     }
                 }
@@ -1479,6 +1495,9 @@ int parseOptions(int argc, const char **argv) {
         } else if (!strcmp(argv[i],"--strlen_assert")) {
             if (lastarg) goto invalid;
             config.strlen_assert = (ssize_t)atoll(argv[++i]);
+        } else if (!strcmp(argv[i],"--strlen_log2valrangesize_assert")) {
+            if (lastarg) goto invalid;
+            config.strlen_log2valrangesize_assert = atoi(argv[++i]);
 
         } else if (!strcmp(argv[i],"-k")) {
             if (lastarg) goto invalid;
@@ -1704,7 +1723,9 @@ int isDone(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     atomicGet(config.requests_finished, requests_finished);
     atomicGet(config.duration_expired, duration_expired);
 
-    if (liveclients == 0 && (duration_expired || requests_finished != config.requests)) {
+    if (liveclients == 0 && ((config.duration_ms > 0 && !duration_expired) ||
+                             (config.duration_ms <= 0 && requests_finished != config.requests)))
+    {
         fprintf(stderr,"All clients disconnected... aborting.\n");
         exit(1);
     }
@@ -1729,7 +1750,9 @@ int showThroughput(struct aeEventLoop *eventLoop, long long id, void *clientData
     atomicGet(config.previous_requests_finished, previous_requests_finished);
     atomicGet(config.duration_expired, duration_expired);
     
-    if (liveclients == 0 && (duration_expired || requests_finished != config.requests)) {
+    if (liveclients == 0 && ((config.duration_ms > 0 && !duration_expired) ||
+                             (config.duration_ms <= 0 && requests_finished != config.requests)))
+    {
         fprintf(stderr,"All clients disconnected... aborting.\n");
         exit(1);
     }
@@ -1811,6 +1834,7 @@ int main(int argc, const char **argv) {
     config.startup_ms = 0;
     config.startup_expired = 1;
     config.strlen_assert = -1;
+    config.strlen_log2valrangesize_assert = -1;
     config.liveclients = 0;
     config.el = aeCreateEventLoop(1024*10);
     aeCreateTimeEvent(config.el,1,isDone,NULL,NULL);
